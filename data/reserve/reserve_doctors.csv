@@ -1,0 +1,5 @@
+id,name,role,skills,hourly_cost,night_allowed,twentyfour_allowed
+1001,Doctor1001,Retired Specialist,icu;ward,200,1,1
+1002,Doctor1002,Part-time Specialist,ward;clinic_general,170,1,0
+1003,Doctor1003,Senior Consultant,icu;ward,250,0,0
+1004,Doctor1004,Locum Doctor,ward,190,1,1

@@ -1,0 +1,16 @@
+id,name,role,ward,clinic,icu,night_allowed,needs_mentor,max_hours,opt_out,skills,twentyfour_allowed,hourly_cost
+1,Doctor1,specialist,1,1,0,1,0,48,0,ward;clinic_general;clinic_device;clinic_htn;clinic_hf,1,180
+2,Doctor2,specialist,1,1,1,1,0,60,1,ward;clinic_general;icu;clinic_device,1,200
+3,Doctor3,specialist,1,1,0,1,0,60,1,ward;clinic_general;clinic_arrhythmia;clinic_device,1,140
+4,Doctor4,icu_specialist,1,1,1,1,0,65,1,ward;icu;clinic_device,1,250
+5,Doctor5,icu_specialist,1,1,1,1,0,60,1,ward;icu;clinic_arrhythmia;clinic_device,1,250
+6,Doctor6,icu_specialist,1,1,1,1,1,60,1,ward;clinic_general;icu;clinic_htn;clinic_hf,1,250
+7,Doctor7,specialist,1,1,0,0,1,48,0,ward;clinic_general;clinic_arrhythmia;clinic_device,0,120
+8,Doctor8,specialist,1,0,0,0,1,48,0,ward;clinic_general;clinic_hf,0,120
+9,Doctor9,outpatient,0,1,0,0,0,32,0,clinic_general;clinic_device;clinic_htn;clinic_arrhythmia;clinic_hf,0,200
+10,Doctor10,specialist,1,1,1,1,0,60,1,ward;clinic_general;icu;clinic_htn;clinic_device,1,180
+11,Doctor11,specialist,1,1,1,1,0,60,1,ward;clinic_general;icu;clinic_arrhythmia;clinic_device,1,200
+12,Doctor12,icu_specialist,1,1,1,1,0,72,1,ward;icu;clinic_general;clinic_arrhythmia,1,250
+13,Doctor13,specialist,1,1,1,1,0,60,1,ward;clinic_device;clinic_general;clinic_device;clinic_htn;icu,1,200
+14,Doctor14,icu_specialist,1,1,1,1,0,65,1,icu;ward;clinic_general;clinic_device,1,200
+15,Doctor15,resident,1,0,0,0,1,48,0,ward,0,80
