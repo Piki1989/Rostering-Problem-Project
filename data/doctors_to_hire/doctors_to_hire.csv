@@ -1,0 +1,5 @@
+id,name,role,ward,clinic,icu,night_allowed,needs_mentor,max_hours,opt_out,skills,twentyfour_allowed,hourly_cost
+90001,Doctor90001,icu_specialist,1,1,1,1,0,72,1,ward;icu;clinic_general,1,180
+90002,Doctor90002,specialist,1,1,0,1,0,48,0,ward;clinic_general;clinic_device;clinic_htn;clinic_arrhythmia,1,120
+90003,Doctor90003,specialist,1,1,1,1,0,56,1,ward;clinic_general;icu,1,140
+90004,Doctor90004,resident,1,0,0,0,0,48,0,ward,0,60

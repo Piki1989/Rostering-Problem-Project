@@ -1,5 +1,0 @@
-id,name,role,ward,clinic,icu,night_allowed,needs_mentor,max_hours,opt_out,skills,twentyfour_allowed,salary
-90001,Nowakowska,icu_specialist,1,1,1,1,0,56,1,ward;icu;clinic_general,1,150
-90002,Ziółkowski,specialist,1,1,0,1,0,48,0,ward;clinic_general;clinic_device;clinic_htn;clinic_arrhythmia,1,100
-90003,Wróblewska,specialist,1,1,1,1,0,56,1,ward;clinic_general;icu,1,80
-90004,Mikołajczyk,resident,1,0,0,0,0,48,0,ward,0,60
