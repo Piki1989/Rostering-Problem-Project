@@ -6,6 +6,13 @@ import multiprocessing
 from datetime import datetime as dt
 from compute_global_metrics import compute_hospital_efficiency_v2
 import math
+from pandemic_mode import (
+    PandemicConfig,
+    prepare_pandemic_bubbles,
+    validate_bubbles,
+    add_pandemic_constraints,
+    get_pandemic_results,
+)
 
 cores = multiprocessing.cpu_count()
 
@@ -121,7 +128,19 @@ def prepare_context(doctors, candidates, shifts, unavail_day, unavail_shift, pre
     }
 
 
-def build_model(context, doctors, candidates, shifts, unavail_day, unavail_shift, pref, allow_hire):
+def build_model(
+    context,
+    doctors,
+    candidates,
+    shifts,
+    unavail_day,
+    unavail_shift,
+    pref,
+    allow_hire,
+
+    pandemic_config=None,
+    bubble_assignment=None,
+):
     model = cp_model.CpModel()
 
     D = context["D"]
@@ -418,6 +437,28 @@ def build_model(context, doctors, candidates, shifts, unavail_day, unavail_shift
             for s in night_shifts:
                 model.Add(x[(d, s)] == 0)
 
+    # =========================================================
+    # PANDEMIC CONSTRAINTS
+    # =========================================================
+
+    pandemic_bundle = None
+
+    if (
+            pandemic_config is not None
+            and bubble_assignment is not None
+    ):
+        pandemic_bundle = add_pandemic_constraints(
+            model=model,
+            x=x,
+            D_all=D_all,
+            S=S,
+            shifts=shifts,
+            shift_idx=shift_idx,
+            config=pandemic_config,
+            bubble_assignment=bubble_assignment,
+            id_to_role=id_to_role,
+        )
+
     """ SLACK """
     """Slack variables used to avoid infeasibility in understaffed scenarios."""
     slacks = {}
@@ -671,7 +712,8 @@ def build_model(context, doctors, candidates, shifts, unavail_day, unavail_shift
         "opt_out_doctors": list(opt_out_doctors),
         "hourly_cost_map": hourly_cost_map,
         "pref_terms": pref_terms,
-        "monthly_limit_hours": monthly_limit_hours
+        "monthly_limit_hours": monthly_limit_hours,
+        "pandemic_bundle": pandemic_bundle,
     }
 
 def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_limit_phase3=300):
@@ -829,7 +871,23 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
     coeff = SCALE // max_pref
     model.Add(Z >= (total_pref - REF["pref"]) * coeff)
 
-    model.Minimize(Z)
+    pandemic_penalty_expr = 0
+
+    if "pandemic_bundle" in bundle:
+
+        pb = bundle["pandemic_bundle"]
+
+        if pb is not None:
+            pandemic_penalty_expr = (
+                    pb["penalty"]
+                    * cp_model.LinearExpr.Sum(
+                pb["crossbubble_violations"]
+            )
+            )
+
+    model.Minimize(
+        Z + pandemic_penalty_expr
+    )
 
     solver.parameters.max_time_in_seconds = time_limit_phase3
     status3 = solver.Solve(model)
@@ -1350,6 +1408,9 @@ def extract_results(bundle, solver, status, doctors, candidates, shifts, pref, c
         "avg_satisfaction": avg_satisfaction,
         "min_satisfaction": min_satisfaction,
         "max_satisfaction": max_satisfaction,
+
+        # pandemic mode
+        "pandemic_bundle": bundle.get("pandemic_bundle"),
     }
 
 def print_full_report(*, results, max_schedule_rows=30):
@@ -1382,7 +1443,20 @@ def print_full_report(*, results, max_schedule_rows=30):
     print(f"#hire vars        : {len(results['raw_hire'])}")
 
 
-def run_scenario(*, doctors, candidates, shifts, unavail_day, unavail_shift, pref, allow_hire: bool):
+def run_scenario(
+    *,
+    doctors,
+    candidates,
+    shifts,
+    unavail_day,
+    unavail_shift,
+    pref,
+
+    allow_hire: bool,
+
+    pandemic_config=None,
+    bubble_assignment=None,
+):
     print("\n=== DEBUG IDS ===")
 
     print("Doctors:", doctors["id"].min(), doctors["id"].max())
@@ -1414,7 +1488,10 @@ def run_scenario(*, doctors, candidates, shifts, unavail_day, unavail_shift, pre
         unavail_day,
         unavail_shift,
         pref,
-        allow_hire=allow_hire
+        allow_hire=allow_hire,
+
+        pandemic_config=pandemic_config,
+        bubble_assignment=bubble_assignment,
     )
 
     from ortools.sat.python import cp_model as _cp
@@ -1465,6 +1542,17 @@ def run_scenario(*, doctors, candidates, shifts, unavail_day, unavail_shift, pre
     results["pref"] = pref
     results["weekly_limits"] = bundle["weekly_limits"]
 
+    if (
+        pandemic_config is not None
+        and bubble_assignment is not None
+    ):
+        results["pandemic"] = get_pandemic_results(
+            bubble_assignment=bubble_assignment,
+            config=pandemic_config,
+            id_to_name=context["id_to_name"],
+            id_to_role=context["id_to_role"],
+        )
+
     return results
 
 def now_ts():
@@ -1502,7 +1590,10 @@ def save_results(results, base_dir, label, ts):
     summary_df.to_csv(out_dir / f"summary_{ts}.csv", index=False)
 
 # === MAIN FUNCTION ===
-def run_model_and_get_results(doctors_df=None):
+def run_model_and_get_results(
+    doctors_df=None,
+    pandemic_mode=False,
+):
     if doctors_df is None:
         # doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_with_cost.csv")
         # doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_30.csv")
@@ -1539,19 +1630,57 @@ def run_model_and_get_results(doctors_df=None):
     doctors["skill_list"] = doctors["skills"].apply(lambda x: x.split(";") if isinstance(x, str) else [])
     doctors["hourly_cost"] = doctors["hourly_cost"].astype(int)
 
+    pandemic_config = None
+    bubble_assignment = None
+
+    if pandemic_mode:
+        pandemic_config = PandemicConfig(
+            num_bubbles=3,
+            contact_depts=["WARD", "ICU"],
+            min_specialists_per_bubble=1,
+        )
+
+        bubble_assignment = prepare_pandemic_bubbles(
+            doctors=doctors,
+            candidates=candidates,
+            config=pandemic_config,
+        )
+
+        validate_bubbles(
+            doctors=doctors,
+            candidates=candidates,
+            shifts=shifts,
+            bubble_assignment=bubble_assignment,
+            config=pandemic_config,
+        )
+
     baseline = run_scenario(
-        doctors=doctors, candidates=candidates, shifts=shifts,
-        unavail_day=unavail_day, unavail_shift=unavail_shift, pref=pref,
-        allow_hire=False
+        doctors=doctors,
+        candidates=candidates,
+        shifts=shifts,
+        unavail_day=unavail_day,
+        unavail_shift=unavail_shift,
+        pref=pref,
+        allow_hire=False,
+
+        pandemic_config=pandemic_config,
+        bubble_assignment=bubble_assignment,
     )
 
     results = {"baseline": baseline}
 
     if baseline["slack"] > 0:
         hire_allowed = run_scenario(
-            doctors=doctors, candidates=candidates, shifts=shifts,
-            unavail_day=unavail_day, unavail_shift=unavail_shift, pref=pref,
-            allow_hire=True
+            doctors=doctors,
+            candidates=candidates,
+            shifts=shifts,
+            unavail_day=unavail_day,
+            unavail_shift=unavail_shift,
+            pref=pref,
+            allow_hire=True,
+
+            pandemic_config=pandemic_config,
+            bubble_assignment=bubble_assignment,
         )
         results["hire_allowed"] = hire_allowed
     else:
@@ -1572,7 +1701,9 @@ def run_model_and_get_results(doctors_df=None):
     return results
 
 if __name__ == "__main__":
-    results = run_model_and_get_results()
+    results = run_model_and_get_results(
+        pandemic_mode=True
+    )
 
     print("\n================ BASELINE (NO HIRE) ================\n")
     print_full_report(results=results["baseline"])
