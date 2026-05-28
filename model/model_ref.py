@@ -5,13 +5,13 @@ import datetime
 import multiprocessing
 from datetime import datetime as dt
 from compute_global_metrics import compute_hospital_efficiency_v2
-import math
 from pandemic_mode import (
     PandemicConfig,
     prepare_pandemic_bubbles,
     validate_bubbles,
     add_pandemic_constraints,
     get_pandemic_results,
+    assign_hired_candidates_to_bubbles
 )
 
 cores = multiprocessing.cpu_count()
@@ -91,9 +91,11 @@ def build_solver_stats(solver, status, model):
             solver_stats["gap_pct"] = round(100 * abs(obj - bb) / abs(obj), 2)
         else:
             solver_stats["gap_pct"] = 0.0
-    except:
+    except Exception as e:
+        print(f"[build_solver_stats] Nie udało się obliczyć gap: {e}")
         solver_stats["best_bound"] = None
-        solver_stats["gap"] = None
+        solver_stats["gap_abs"] = None
+        solver_stats["gap_pct"] = None
 
     return pd.DataFrame([solver_stats])
 
@@ -164,7 +166,7 @@ def build_model(
     """ LISTS AND DICTS """
     shift_date = {shift["id"]: shift["date"] for _, shift in shifts.iterrows()}
 
-    date_list = sorted(shifts["date"].unique())  # lista 30 lub 31 dni
+    date_list = sorted(shifts["date"].unique())
     date_index = {d: i for i, d in enumerate(date_list)}
 
     weekend = {
@@ -197,12 +199,20 @@ def build_model(
     opt_out_doctors = doctors[doctors["opt_out"] == 1]["id"]
     regular_doctors = doctors[doctors["opt_out"] == 0]["id"]
 
-    for _, cand in candidates.iterrows():
-        if "opt_out" in cand and cand["opt_out"] in (0, 1):
-            pass
-        else:
-            cand_id = cand["id"]
-            regular_doctors = regular_doctors.append(pd.Index([cand_id]))
+    # for _, cand in candidates.iterrows():
+    #     if "opt_out" in cand and cand["opt_out"] in (0, 1):
+    #         pass
+    #     else:
+    #         cand_id = cand["id"]
+    #         regular_doctors = regular_doctors.append(pd.Index([cand_id]))
+    extra_regular_ids = [
+        int(cand["id"])
+        for _, cand in candidates.iterrows()
+        if "opt_out" not in cand or cand["opt_out"] not in (0, 1)
+    ]
+    if extra_regular_ids:
+        regular_doctors = pd.Index(list(regular_doctors) + extra_regular_ids)
+
 
     night_allowed = {doctor["id"]: doctor["night_allowed"] for _, doctor in doctors.iterrows()}
     for _, cand in candidates.iterrows():
@@ -408,6 +418,12 @@ def build_model(
     """9. Only eligible physicians may be assigned 24-hour shifts."""
     for d in D_all:
         if twentyfour_allowed[d] == 0:
+            for s in twentyfour_shifts:
+                model.Add(x[(d, s)] == 0)
+
+    """9.a Pandemic policy: disable all 24-hour shifts."""
+    if pandemic_config is not None:
+        for d in D_all:
             for s in twentyfour_shifts:
                 model.Add(x[(d, s)] == 0)
 
@@ -793,13 +809,13 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
     total_pref = sum(pref_terms) if pref_terms else 0
 
     REF = {
-        "cost": 1_620_000,
+        "cost": 540_000,
         "spread": 4,
         "weekend_spread": 3,
         "hard_spread": 2,
         "underwork": 0,
         "weekly_underwork": 0,
-        "pref": -900,
+        "pref": -300,
     }
 
     B = REF["cost"]
@@ -1456,6 +1472,7 @@ def run_scenario(
 
     pandemic_config=None,
     bubble_assignment=None,
+    validation_result=None,
 ):
     print("\n=== DEBUG IDS ===")
 
@@ -1542,16 +1559,31 @@ def run_scenario(
     results["pref"] = pref
     results["weekly_limits"] = bundle["weekly_limits"]
 
-    if (
-        pandemic_config is not None
-        and bubble_assignment is not None
-    ):
-        results["pandemic"] = get_pandemic_results(
+    if pandemic_config is not None and bubble_assignment is not None:
+        hired_candidate_ids = [
+            c for c, hired in results["raw_hire"].items()
+            if hired == 1
+        ]
+
+        final_bubble_assignment = assign_hired_candidates_to_bubbles(
+            hired_candidate_ids=hired_candidate_ids,
             bubble_assignment=bubble_assignment,
+            doctors=doctors,
+            candidates=candidates,
             config=pandemic_config,
-            id_to_name=context["id_to_name"],
-            id_to_role=context["id_to_role"],
         )
+
+        results["pandemic"] = {
+            "config": pandemic_config,
+            "bubble_assignment": final_bubble_assignment,
+            "validation": validation_result,
+            "summary": get_pandemic_results(
+                bubble_assignment=final_bubble_assignment,
+                config=pandemic_config,
+                id_to_name=context["id_to_name"],
+                id_to_role=context["id_to_role"],
+            )
+        }
 
     return results
 
@@ -1595,18 +1627,19 @@ def run_model_and_get_results(
     pandemic_mode=False,
 ):
     if doctors_df is None:
-        # doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_with_cost.csv")
+        doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_with_cost.csv")
         # doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_30.csv")
-        doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_45.csv")
+        # doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_45.csv")
         # doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_with_cost1.csv")
         # doctors = pd.read_csv(DATA_DIR / "doctors" / "doctors_with_cost2.csv")
     else:
         doctors = doctors_df.copy()
 
     # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec2026.csv")
-    # unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_dec_2026.csv")
-    # unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_sh_dec_2026.csv")
-    # pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_dec.csv")
+    shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec2026_pandemic.csv")
+    unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_dec_2026.csv")
+    unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_sh_dec_2026.csv")
+    pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_dec.csv")
     # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_mar2026.csv")
     # unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavailability_mar2026.csv")
     # unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "shift_unavailability_mar2026.csv")
@@ -1615,10 +1648,10 @@ def run_model_and_get_results(
     # unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_day_30.csv")
     # unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_shift_30.csv")
     # pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_30.csv")
-    shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_45.csv")
-    unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_day_45.csv")
-    unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_shift_45.csv")
-    pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_45.csv")
+    # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_45.csv")
+    # unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_day_45.csv")
+    # unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_shift_45.csv")
+    # pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_45.csv")
     # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec_1.csv")
     # unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_dec_2026_1.csv")
     # unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_sh_dec_2026_1.csv")
@@ -1646,7 +1679,14 @@ def run_model_and_get_results(
             config=pandemic_config,
         )
 
-        validate_bubbles(
+        # validate_bubbles(
+        #     doctors=doctors,
+        #     candidates=candidates,
+        #     shifts=shifts,
+        #     bubble_assignment=bubble_assignment,
+        #     config=pandemic_config,
+        # )
+        validation_result = validate_bubbles(
             doctors=doctors,
             candidates=candidates,
             shifts=shifts,
@@ -1665,6 +1705,7 @@ def run_model_and_get_results(
 
         pandemic_config=pandemic_config,
         bubble_assignment=bubble_assignment,
+        validation_result=validation_result,
     )
 
     results = {"baseline": baseline}

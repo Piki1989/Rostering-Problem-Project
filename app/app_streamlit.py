@@ -14,10 +14,10 @@ from model.cp_sat_model import run_model_and_get_results, run_with_one_extra_doc
 st.title("HARMONOGRAM DYŻURÓW")
 
 # === READ DATA FILES ===
-doctors = pd.read_csv(os.path.join(project_root, "data/doctors2.csv"))
-shifts = pd.read_csv(os.path.join(project_root, "data/shifts_1.csv"))
-unavail_day = pd.read_csv(os.path.join(project_root, "data/unavailabilities_day_4.csv"))
-unavail_shift = pd.read_csv(os.path.join(project_root, "data/unavailabilities_shift.csv"))
+doctors = pd.read_csv(os.path.join(project_root, "data/doctors/doctors2.csv"))
+shifts = pd.read_csv(os.path.join(project_root, "data/shifts/shifts3.csv"))
+unavail_day = pd.read_csv(os.path.join(project_root, "data/unavailabilities_day/unavailabilities_day_2.csv"))
+unavail_shift = pd.read_csv(os.path.join(project_root, "data/unavailabilities_shift/unavailabilities_shift.csv"))
 
 
 # === DAYS OF WEEK ===

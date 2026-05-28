@@ -1,43 +1,19 @@
 """
-pandemic_mode.py
-================
 Pandemic Mode for the Hospital Rostering Optimizer.
 
-POPRAWNA KOLEJNOŚĆ WYWOŁAŃ:
----------------------------
+Definition of contact:
+  - Sharing the same shift in WARD or ICU = epidemiological contact
+  - CLINIC excluded by default (separate offices)
+  - Handover periods: optional handover_window_hours (default: 0)
 
-  1. Wczytaj dane (doctors, shifts, unavail itd.)
-
-  2. Jeśli pandemic_mode=True:
-       config = PandemicConfig(...)
-       bubble_assignment = prepare_pandemic_bubbles(doctors, candidates, config)
-       # bubble_assignment: {doctor_id -> bubble_id}  — gotowe PRZED solverem
-
-  3. build_model(..., pandemic_config=config, bubble_assignment=bubble_assignment)
-       # add_pandemic_constraints() wywoływane WEWNĄTRZ build_model po hard constraints
-
-  4. solve_3_phase(bundle)   # bez zmian
-
-  5. extract_results(...)    # bundle zawiera bubble_assignment i pandemic_config
-
-  6. render_pandemic_tab(results, ...)   # UI odczytuje dane z results
-
-Definicja kontaktu:
--------------------
-  - Ta sama zmiana w WARD lub ICU = kontakt epidemiologiczny
-  - CLINIC domyślnie wykluczone (osobne gabinety)
-  - Handover (przekazanie dyżuru): opcjonalny handover_window_hours (domyślnie 0)
-
-Emergency replacement w trybie pandemicznym:
---------------------------------------------
-  - Zastępstwo tylko z tej samej bańki (działy kontaktowe)
-  - Rezerwa zewnętrzna dozwolona z ostrzeżeniem
-  - Kandydaci do zatrudnienia WYŁĄCZENI
+Emergency replacement in pandemic mode:
+  - Replacement only from the same bubble (contact departments)
+  - External reserve staff allowed with a warning
+  - Additional physicians may be hired (only during schedule construction)
 """
 
 from __future__ import annotations
 
-import math
 import warnings
 from dataclasses import dataclass, field
 from typing import Optional, Any
@@ -53,24 +29,24 @@ from ortools.sat.python import cp_model
 @dataclass
 class PandemicConfig:
     """
-    Konfiguracja trybu pandemicznego.
+    Pandemic mode configuration.
 
     num_bubbles : int
-        Liczba izolowanych bańek. Zalecane 2–4.
-        Każda bańka powinna móc samodzielnie obsadzić co najmniej jedną zmianę.
+        Number of isolated bubbles.
+        Each bubble should be able to independently cover at least one shift.
 
     contact_depts : list[str]
-        Oddziały, gdzie wspólna zmiana = kontakt. Domyślnie WARD + ICU.
-        CLINIC wyłączone (osobne gabinety, niższe ryzyko transmisji).
+        Departments where sharing a shift counts as contact.
+        CLINIC excluded (separate offices).
 
     handover_window_hours : int
-        Godziny przekazania dyżuru liczone jako kontakt. Domyślnie 0 (V1).
+        Shift handover hours considered as contact. Default: 0.
 
     min_specialists_per_bubble : int
-        Minimalna liczba specjalistów w każdej bańce (kliniczna samodzielność).
+        Minimum number of specialists required in each bubble.
 
     allow_cross_bubble_reserve : bool
-        Czy rezerwa zewnętrzna może zastępować dowolną bańkę.
+        Whether external reserve staff may replace physicians in any bubble.
     """
     num_bubbles: int = 3
     contact_depts: list[str] = field(default_factory=lambda: ["WARD", "ICU"])
@@ -79,9 +55,6 @@ class PandemicConfig:
     allow_cross_bubble_reserve: bool = True
 
 
-# ---------------------------------------------------------------------------
-# KROK 2: prepare_pandemic_bubbles()  —  PRZED build_model()
-# ---------------------------------------------------------------------------
 
 def prepare_pandemic_bubbles(
     doctors: pd.DataFrame,
@@ -91,15 +64,12 @@ def prepare_pandemic_bubbles(
 ) -> dict[int, int]:
     """
     Skill-aware greedy bubble assignment.
-
-    CLINIC nie jest traktowane jako dział kontaktowy.
-    Bańki są przygotowywane przed solverem.
     """
     import random
     rng = random.Random(seed)
 
     B = config.num_bubbles
-    all_df = pd.concat([doctors, candidates], ignore_index=True).copy()
+    all_df = doctors.copy()
 
     if "skills" not in all_df.columns:
         all_df["skills"] = ""
@@ -129,8 +99,8 @@ def prepare_pandemic_bubbles(
 
     def choose_bubble(priority_key: str) -> int:
         """
-        Wybiera bańkę z najmniejszą liczbą danej kompetencji,
-        a przy remisie z najmniejszym rozmiarem.
+        Selects the bubble with the smallest number of physicians having
+        the given competency, and in case of a tie, the smallest bubble size.
         """
         return min(
             range(B),
@@ -189,19 +159,29 @@ def prepare_pandemic_bubbles(
         add_doctor(row, "specialists")
 
     # 3. Night-capable doctors
+    _night_col = (
+        all_df["night_allowed"]
+        if "night_allowed" in all_df.columns
+        else pd.Series(0, index=all_df.index)
+    )
     night_docs = all_df[
-        (all_df.get("night_allowed", 0) == 1)
+        (_night_col == 1)
         & (~all_df["id"].isin(assigned))
-    ]
+        ]
 
     for row in shuffled_rows(night_docs):
         add_doctor(row, "night")
 
     # 4. 24h-capable doctors
+    _twentyfour_col = (
+        all_df["twentyfour_allowed"]
+        if "twentyfour_allowed" in all_df.columns
+        else pd.Series(0, index=all_df.index)
+    )
     twentyfour_docs = all_df[
-        (all_df.get("twentyfour_allowed", 0) == 1)
+        (_twentyfour_col == 1)
         & (~all_df["id"].isin(assigned))
-    ]
+        ]
 
     for row in shuffled_rows(twentyfour_docs):
         add_doctor(row, "twentyfour")
@@ -212,26 +192,57 @@ def prepare_pandemic_bubbles(
     for row in shuffled_rows(others):
         add_doctor(row, "size")
 
-    print("\n[PandemicMode] === Podział na bańki przed build_model ===")
-    print(f"  Lekarze: {len(doctors)}, Kandydaci: {len(candidates)}")
-    print(f"  Liczba bańek: {B}")
-    print(f"  Działy kontaktowe: {config.contact_depts}")
-    print("  CLINIC nie jest traktowane jako kontakt epidemiologiczny.")
+    print("\n[PandemicMode] === Bubble assignment before build_model ===")
+
+    print(f"  Physicians: {len(doctors)}, Candidates: {len(candidates)}")
+    print(f"  Number of bubbles: {B}")
+    print(f"  Contact departments: {config.contact_depts}")
+    print("  CLINIC is not treated as epidemiological contact.")
 
     for b in range(B):
         s = bubble_stats[b]
         print(
-            f"  Bańka {b}: "
-            f"{s['size']} osób, "
-            f"{s['specialists']} spec., "
-            f"{s['icu']} ICU, "
-            f"{s['night']} night, "
-            f"{s['twentyfour']} 24h"
+            f"  Bubble {b}: "
+            f"{s['size']} physicians, "
+            f"{s['specialists']} specialists, "
+            f"{s['icu']} ICU-capable, "
+            f"{s['night']} night-eligible, "
+            f"{s['twentyfour']} 24h-eligible"
         )
 
     print()
 
     return assignment
+
+
+def assign_hired_candidates_to_bubbles(
+    hired_candidate_ids: list[int],
+    bubble_assignment: dict[int, int],
+    doctors: pd.DataFrame,
+    candidates: pd.DataFrame,
+    config: PandemicConfig,
+) -> dict[int, int]:
+    updated = dict(bubble_assignment)
+
+    bubble_sizes = {
+        b: sum(1 for bb in updated.values() if bb == b)
+        for b in range(config.num_bubbles)
+    }
+
+    for cid in hired_candidate_ids:
+        if cid in updated:
+            continue
+
+        target_bubble = min(
+            range(config.num_bubbles),
+            key=lambda b: (bubble_sizes[b], b)
+        )
+
+        updated[cid] = target_bubble
+        bubble_sizes[target_bubble] += 1
+
+    return updated
+
 
 
 def validate_bubbles(
@@ -240,14 +251,16 @@ def validate_bubbles(
     shifts: pd.DataFrame,
     bubble_assignment: dict[int, int],
     config: PandemicConfig,
-) -> pd.DataFrame:
+) -> dict:
     """
-    Diagnostyka bańek przed solverem.
+    Pre-solver bubble diagnostics.
 
-    Funkcja nie zatrzymuje programu.
-    Zwraca tabelę z informacją, czy każda bańka ma minimalne kompetencje.
+    Returns a dictionary containing:
+    - validation_df: table of competencies for each bubble
+    - issues: list of detected issues (severity, bubble, message)
+    - is_safe: bool indicating whether all bubbles satisfy the minimum requirements
     """
-    all_df = pd.concat([doctors, candidates], ignore_index=True).copy()
+    all_df = doctors.copy()
 
     if "skills" not in all_df.columns:
         all_df["skills"] = ""
@@ -261,6 +274,7 @@ def validate_bubbles(
         return "icu" in str(skills).lower()
 
     rows = []
+    issues = []
 
     for b in range(config.num_bubbles):
         ids = [d for d, bb in bubble_assignment.items() if bb == b]
@@ -272,21 +286,43 @@ def validate_bubbles(
 
         night_capable = (
             int((bdf["night_allowed"] == 1).sum())
-            if "night_allowed" in bdf.columns
-            else 0
+            if "night_allowed" in bdf.columns else 0
         )
-
         twentyfour_capable = (
             int((bdf["twentyfour_allowed"] == 1).sum())
-            if "twentyfour_allowed" in bdf.columns
-            else 0
+            if "twentyfour_allowed" in bdf.columns else 0
         )
 
-        max_weekly_hours = (
-            int(bdf["max_weekly_hours"].sum())
-            if "max_weekly_hours" in bdf.columns
-            else None
-        )
+        bubble_ok = True
+        bubble_issues = []
+
+        if specialists < config.min_specialists_per_bubble:
+            msg = (
+                f"Bubble {b}: only {specialists} specialists "
+                f"(required minimum: {config.min_specialists_per_bubble})"
+            )
+            issues.append({"severity": "ERROR", "bubble": b, "message": msg})
+            warnings.warn(f"[PandemicMode] {msg}")
+            bubble_ok = False
+            bubble_issues.append("missing specialists")
+
+        if "ICU" in set(config.contact_depts) and icu_capable == 0:
+            msg = f"Bubble {b}: no physician with ICU competency"
+            issues.append({"severity": "ERROR", "bubble": b, "message": msg})
+            warnings.warn(f"[PandemicMode] {msg}")
+            bubble_ok = False
+            bubble_issues.append("missing ICU competency")
+
+        if night_capable == 0:
+            msg = f"Bubble {b}: no physician eligible for night shifts"
+            issues.append({"severity": "WARNING", "bubble": b, "message": msg})
+            warnings.warn(f"[PandemicMode] {msg}")
+            bubble_issues.append("missing night-shift eligibility")
+
+        if twentyfour_capable == 0:
+            msg = f"Bubble {b}: no physician eligible for 24h shifts"
+            issues.append({"severity": "INFO", "bubble": b, "message": msg})
+            bubble_issues.append("missing 24h-shift eligibility")
 
         row = {
             "Bubble": b,
@@ -295,42 +331,23 @@ def validate_bubbles(
             "ICU capable": icu_capable,
             "Night capable": night_capable,
             "24h capable": twentyfour_capable,
-            "Max weekly hours": max_weekly_hours,
+            "Status": "OK" if bubble_ok else "PROBLEM",
+            "Issues": ", ".join(bubble_issues) if bubble_issues else "—",
         }
         rows.append(row)
 
-        if specialists < config.min_specialists_per_bubble:
-            warnings.warn(
-                f"[PandemicMode] Bańka {b} ma tylko {specialists} specjalistów "
-                f"(wymagane minimum: {config.min_specialists_per_bubble})."
-            )
-
-        if "ICU" in set(config.contact_depts) and icu_capable == 0:
-            warnings.warn(
-                f"[PandemicMode] Bańka {b} nie ma żadnego lekarza z kompetencją ICU."
-            )
-
-        if night_capable == 0:
-            warnings.warn(
-                f"[PandemicMode] Bańka {b} nie ma lekarza dopuszczonego do dyżurów nocnych."
-            )
-
-        if twentyfour_capable == 0:
-            warnings.warn(
-                f"[PandemicMode] Bańka {b} nie ma lekarza dopuszczonego do dyżurów 24h."
-            )
-
     validation_df = pd.DataFrame(rows)
+    is_safe = not any(i["severity"] == "ERROR" for i in issues)
 
-    print("\n[PandemicMode] === Walidacja bańek ===")
+    print("\n[PandemicMode] === Bubble validation ===")
     print(validation_df.to_string(index=False))
     print()
 
-    return validation_df
-
-# ---------------------------------------------------------------------------
-# KROK 3: add_pandemic_constraints()  —  WEWNĄTRZ build_model()
-# ---------------------------------------------------------------------------
+    return {
+        "validation_df": validation_df,
+        "issues": issues,
+        "is_safe": is_safe,
+    }
 
 def add_pandemic_constraints(
     model: cp_model.CpModel,
@@ -344,18 +361,9 @@ def add_pandemic_constraints(
     id_to_role: dict[int, str],
 ) -> dict:
     """
-    Dodaje ograniczenia bańkowe do modelu CP-SAT.
+    Adds bubble constraints to the CP-SAT model.
 
-    Wywołaj WEWNĄTRZ build_model(), po wszystkich hard constraints,
-    przed soft constraints i budowaniem objective.
-
-    HC-P1. Lekarze z różnych bańek nie mogą dzielić zmiany w dziale kontaktowym.
-           Dla każdej pary (d1, d2) z różnych bańek i każdej zmiany kontaktowej:
-             x[d1,s] + x[d2,s] <= 1
-
-    Złożoność: O(D^2 / 2 * S_contact).
-    Dla 45 lekarzy i ~200 zmian kontaktowych: ~45^2/2 * 200 ≈ 200k constraints.
-    OR-Tools radzi sobie z tym bez problemu.
+    Complexity: O(D^2 / 2 * S_contact).
     """
     contact_depts  = set(config.contact_depts)
     contact_shifts = [
@@ -363,30 +371,34 @@ def add_pandemic_constraints(
         if shifts.loc[shift_idx[s], "dept"] in contact_depts
     ]
 
-    print(f"[PandemicMode] Dodawanie ograniczeń HC-P1:")
-    print(f"  Działy kontaktowe: {contact_depts}")
-    print(f"  Zmian kontaktowych: {len(contact_shifts)} / {len(S)}")
+    print(f"[PandemicMode] Adding HC-P1 constraints:")
+    print(f"  Contact departments: {contact_depts}")
+    print(f"  Contact shifts: {len(contact_shifts)} / {len(S)}")
 
-    # constraint_count = 0
-    # for s in contact_shifts:
-    #     for i, d1 in enumerate(D_all):
-    #         for d2 in D_all[i + 1:]:
-    #             if bubble_assignment.get(d1, 0) != bubble_assignment.get(d2, 0):
-    #                 model.Add(x[(d1, s)] + x[(d2, s)] <= 1)
-    #                 constraint_count += 1
     crossbubble_violations = []
 
     BIG_PANDEMIC_PENALTY = 1_000_000
 
     constraint_count = 0
 
+    missing_from_bubbles = [d for d in D_all if d not in bubble_assignment]
+    if missing_from_bubbles:
+        warnings.warn(
+            f"[PandemicMode] {len(missing_from_bubbles)} physicians do not have an assigned bubble "
+            f"and will be skipped in pandemic constraints: {missing_from_bubbles}"
+        )
+
     for s in contact_shifts:
 
         for i, d1 in enumerate(D_all):
+            if d1 not in bubble_assignment:
+                continue
 
             for d2 in D_all[i + 1:]:
+                if d2 not in bubble_assignment:
+                    continue
 
-                if bubble_assignment.get(d1, 0) != bubble_assignment.get(d2, 0):
+                if bubble_assignment[d1] != bubble_assignment[d2]:
                     viol = model.NewBoolVar(
                         f"crossbubble_{d1}_{d2}_{s}"
                     )
@@ -396,21 +408,16 @@ def add_pandemic_constraints(
                     )
 
                     crossbubble_violations.append(viol)
-
                     constraint_count += 1
 
-    print(f"  Dodano {constraint_count} pandemic constraints.")
-    print(f"  Cross-bubble violations są dozwolone tylko awaryjnie.")
+    print(f"  Added {constraint_count} pandemic constraints.")
+    print(f"  Cross-bubble violations are allowed only in emergency situations.")
 
     return {
         "crossbubble_violations": crossbubble_violations,
         "penalty": BIG_PANDEMIC_PENALTY,
     }
 
-
-# ---------------------------------------------------------------------------
-# KROK 5: get_pandemic_results()  —  na końcu extract_results() / run_scenario()
-# ---------------------------------------------------------------------------
 
 def get_pandemic_results(
     bubble_assignment: dict[int, int],
@@ -419,10 +426,7 @@ def get_pandemic_results(
     id_to_role: dict[int, str],
 ) -> dict:
     """
-    Pakuje dane o bańkach do słownika results.
-
-    Wywołaj na końcu run_scenario() i wrzuć wynik do results:
-        results["pandemic"] = get_pandemic_results(bubble_assignment, config, ...)
+    Packages bubble-related data into the results dictionary.
     """
     B = config.num_bubbles
     bubbles: dict[int, dict] = {}
@@ -450,7 +454,7 @@ def get_pandemic_results(
 
 
 # ---------------------------------------------------------------------------
-# SYMULACJA KWARANTANNY
+# QUARANTINE SIMULATION
 # ---------------------------------------------------------------------------
 
 def simulate_quarantine(
@@ -461,13 +465,15 @@ def simulate_quarantine(
     config: PandemicConfig,
 ) -> dict:
     """
-    Symuluje kwarantannę jednej bańki (analiza post-hoc, bez re-solve).
+    Simulates the quarantine of a single bubble
+    (post-hoc analysis without re-solving the model).
 
-    Usuwa lekarzy z danej bańki z harmonogramu i raportuje:
-    - które zmiany stają się nieobsadzone
-    - jaki % pokrycia tracimy
-    - severity (LOW / MEDIUM / HIGH)
-    - rekomendację działania
+    Removes physicians from the selected bubble from the schedule
+    and reports:
+    - which shifts become uncovered
+    - what percentage of coverage is lost
+    - severity level (LOW / MEDIUM / HIGH)
+    - recommended actions
     """
     schedule_df = results["schedule_df"].copy()
 
@@ -484,9 +490,20 @@ def simulate_quarantine(
         (schedule_df["Missing"] == 0)
     ].copy()
 
-    total_covered       = int((schedule_df["Missing"] == 0).sum())
-    newly_uncovered     = len(affected)
-    coverage_impact_pct = round(100 * newly_uncovered / max(1, total_covered), 1)
+    total_covered_slots = int(
+        schedule_df[schedule_df["Missing"] == 0][["Date", "ShiftCode"]]
+        .drop_duplicates()
+        .shape[0]
+    )
+    newly_uncovered_slots = int(
+        affected[["Date", "ShiftCode"]]
+        .drop_duplicates()
+        .shape[0]
+    ) if not affected.empty else 0
+
+    coverage_impact_pct = round(
+        100 * newly_uncovered_slots / max(1, total_covered_slots), 1
+    )
     days_affected       = int(affected["Date"].nunique()) if not affected.empty else 0
 
     dept_impact = {}
@@ -495,15 +512,15 @@ def simulate_quarantine(
 
     if coverage_impact_pct < 20:
         severity = "LOW"
-        action   = "Harmonogram wytrzyma kwarantannę — przesuń nadgodziny."
+        action = "The schedule can withstand the quarantine — redistribute overtime."
     elif coverage_impact_pct < 40:
         severity = "MEDIUM"
-        action   = "Aktywuj rezerwę i rozważ awaryjne pokrycie między-bańkowe."
+        action   = "Activate reserve staff and consider emergency cross-bubble coverage."
     else:
         severity = "HIGH"
         action   = (
-            "Krytyczny niedobór obsady. Eskaluj natychmiast. "
-            "Rozważ tymczasowe scalenie dwóch pozostałych bańek."
+            "Critical staffing shortage. Escalate immediately. "
+            "Consider temporarily merging the two remaining bubbles."
         )
 
     return {
@@ -516,18 +533,133 @@ def simulate_quarantine(
         "dept_impact":           dept_impact,
         "severity":              severity,
         "recommendation": (
-            f"[{severity}] Kwarantanna bańki {quarantine_bubble} "
-            f"({len(quarantined_names)} lekarzy) usuwa {newly_uncovered} przypisań "
-            f"({coverage_impact_pct}% pokrytych slotów). "
-            f"Dotknięte oddziały: {dept_impact}. {action}"
+            f"[{severity}] Quarantine of bubble {quarantine_bubble} "
+            f"({len(quarantined_names)} physicians) removes "
+            f"{newly_uncovered_slots} unique shifts "
+            f"({coverage_impact_pct}% of covered slots). "
+            f"Affected departments: {dept_impact}. {action}"
         ),
     }
 
 
-# ---------------------------------------------------------------------------
-# EMERGENCY REPLACEMENT W TRYBIE PANDEMICZNYM
-# ---------------------------------------------------------------------------
+def simulate_quarantine_with_reserve(
+    results: dict,
+    quarantine_bubble: int,
+    bubble_assignment: dict[int, int],
+    id_to_name: dict[int, str],
+    config: PandemicConfig,
+    reserve_doctors_df: Optional[pd.DataFrame] = None,
+) -> dict:
+    """
+    Extended quarantine simulation with activation of external reserve staff.
 
+    Returns:
+    - uncovered_after_quarantine: shifts lost after quarantine
+    - covered_by_reserve: shifts that reserve staff can cover
+    - residual_gap: shifts that still remain uncovered
+    - reserve_assignments: mapping of reserve staff to covered shifts
+    """
+    base_result = simulate_quarantine(
+        results=results,
+        quarantine_bubble=quarantine_bubble,
+        bubble_assignment=bubble_assignment,
+        id_to_name=id_to_name,
+        config=config,
+    )
+
+    uncovered_shifts = base_result["uncovered_shifts"]
+
+    if reserve_doctors_df is None or reserve_doctors_df.empty:
+        return {
+            **base_result,
+            "reserve_available": False,
+            "covered_by_reserve": 0,
+            "residual_gap": len(uncovered_shifts),
+            "reserve_assignments": pd.DataFrame(),
+            "residual_uncovered": uncovered_shifts,
+        }
+
+    reserve_df = reserve_doctors_df.copy()
+    if "skill_list" not in reserve_df.columns:
+        reserve_df["skill_list"] = reserve_df.get("skills", "").apply(
+            lambda x: x.split(";") if isinstance(x, str) else []
+        )
+
+    reserve_busy = {row["name"]: set() for _, row in reserve_df.iterrows()}
+
+    reserve_assignments = []
+    residual_rows = []
+
+    shifts_meta = results["shifts"]
+
+    for _, shift in uncovered_shifts.iterrows():
+        shift_date = str(shift["Date"])[:10]
+        shift_code = shift["ShiftCode"]
+        shift_hours = int(shift["Hours"])
+        is_night = "_N_" in shift_code or shift_hours == 24
+        is_24h = shift_hours == 24
+
+        meta_row = shifts_meta[shifts_meta["code"] == shift_code]
+        required_skill = (
+            meta_row["required_skill"].iloc[0]
+            if not meta_row.empty and "required_skill" in meta_row.columns
+            else ""
+        )
+
+        assigned = False
+        for _, res in reserve_df.iterrows():
+            res_name = res["name"]
+
+            if shift_date in reserve_busy[res_name]:
+                continue
+
+            skill_ok = (
+                required_skill == ""
+                or required_skill in (res["skill_list"] if isinstance(res["skill_list"], list)
+                                      else str(res.get("skills", "")).split(";"))
+            )
+            if not skill_ok:
+                continue
+
+            if is_night and int(res.get("night_allowed", 1) or 0) == 0:
+                continue
+            if is_24h and int(res.get("twentyfour_allowed", 1) or 0) == 0:
+                continue
+
+            reserve_busy[res_name].add(shift_date)
+            extra_cost = int(res.get("hourly_cost", 0)) * shift_hours
+
+            reserve_assignments.append({
+                "Date": shift_date,
+                "ShiftCode": shift_code,
+                "Dept": shift["Dept"],
+                "Reserve doctor": res_name,
+                "Cost (PLN)": extra_cost,
+            })
+            assigned = True
+            break
+
+        if not assigned:
+            residual_rows.append(shift.to_dict())
+
+    reserve_df_out = pd.DataFrame(reserve_assignments)
+    residual_df = pd.DataFrame(residual_rows) if residual_rows else pd.DataFrame()
+
+    total_reserve_cost = int(reserve_df_out["Cost (PLN)"].sum()) if not reserve_df_out.empty else 0
+
+    return {
+        **base_result,
+        "reserve_available": True,
+        "covered_by_reserve": len(reserve_df_out),
+        "residual_gap": len(residual_df),
+        "reserve_assignments": reserve_df_out,
+        "residual_uncovered": residual_df,
+        "reserve_total_cost": total_reserve_cost,
+    }
+
+# ---------------------------------------------------------------------------
+# EMERGENCY REPLACEMENT DURING PANDEMIC MODE
+# ---------------------------------------------------------------------------
 def find_replacement_pandemic(
     results: dict,
     sick_doctor: str,
@@ -538,61 +670,47 @@ def find_replacement_pandemic(
     reserve_doctors_df: Optional[pd.DataFrame] = None,
 ) -> dict:
     """
-    Szuka zastępcy w trybie pandemicznym.
+    Searches for a replacement physician in pandemic mode.
 
-    Reguły:
-      1. Dział kontaktowy (WARD/ICU): tylko lekarze z tej samej bańki
-      2. Dział niekontaktowy (CLINIC): dowolna bańka
-      3. Rezerwa zewnętrzna: zawsze dozwolona z ostrzeżeniem
-      4. Kandydaci do zatrudnienia: WYŁĄCZENI
-
-    Struktura zwracanego słownika jest zgodna z find_replacement()
-    z emergency_replacement_new.py, z dodatkowymi polami:
-        pandemic_mode, bubble_restrictions_applied, is_contact_dept, sick_bubble
+    Rules:
+      1. Contact departments (WARD/ICU): only physicians from the same bubble
+      2. Non-contact departments (CLINIC): physicians from any bubble allowed
+      3. External reserve staff: always allowed, with a warning
+      4. Hiring candidates: EXCLUDED
     """
-    try:
-        from emergency_replacement_new import (
-            _build_schedule_index,
-            _build_date_index,
-            _check_rest_rules,
-            _score_candidate,
-        )
-    except ImportError:
-        raise ImportError(
-            "Nie znaleziono emergency_replacement_new.py. "
-            "Upewnij się że plik jest w tym samym katalogu co pandemic_mode.py."
-        )
-
-    schedule_df   = results["schedule_df"]
-    stats_df      = results["stats_df"]
-    shifts_df     = results["shifts"]
-    doctors_df    = results["doctors"]
+    schedule_df = results["schedule_df"]
+    stats_df = results["stats_df"]
+    shifts_df = results["shifts"]
+    doctors_df = results["doctors"]
     weekly_limits = results["weekly_limits"]
 
-    name_to_id  = {v: k for k, v in id_to_name.items()}
-    sick_id     = name_to_id.get(sick_doctor)
+    name_to_id = {v: k for k, v in id_to_name.items()}
+    sick_id = name_to_id.get(sick_doctor)
     sick_bubble = bubble_assignment.get(sick_id, -1)
 
-    # Dane zmiany
     shift_rows = schedule_df[schedule_df["ShiftCode"] == shift_code]
     if shift_rows.empty:
         return {
-            "shift_code": shift_code, "sick_doctor": sick_doctor,
-            "shift_info": {}, "candidates": [],
+            "shift_code": shift_code,
+            "sick_doctor": sick_doctor,
+            "shift_info": {},
+            "candidates": [],
             "recommendation": None,
-            "fallback_message": f"Zmiana '{shift_code}' nie znaleziona w harmonogramie.",
-            "pandemic_mode": True, "bubble_restrictions_applied": False,
+            "fallback_message": f"Shift '{shift_code}' not found in the schedule.",
+            "pandemic_mode": True,
+            "bubble_restrictions_applied": False,
         }
 
-    shift_row  = shift_rows.iloc[0]
+    shift_row = shift_rows.iloc[0]
     shift_info = {
-        "date":  str(shift_row["Date"])[:10],
-        "dept":  shift_row["Dept"],
+        "date": str(shift_row["Date"])[:10],
+        "dept": shift_row["Dept"],
         "start": int(shift_row["StartHour"]),
-        "end":   int(shift_row["EndHour"]),
+        "end": int(shift_row["EndHour"]),
         "hours": int(shift_row["Hours"]),
-        "code":  shift_code,
+        "code": shift_code,
     }
+
     shift_meta = shifts_df[shifts_df["code"] == shift_code]
     shift_info["required_skill"] = (
         shift_meta["required_skill"].iloc[0]
@@ -601,10 +719,7 @@ def find_replacement_pandemic(
     )
 
     is_contact_dept = shift_info["dept"] in config.contact_depts
-    date_index      = _build_date_index(schedule_df)
-    schedule_index  = _build_schedule_index(schedule_df)
-    active_doctors  = [n for n in schedule_index if n != sick_doctor]
-    required_skill  = shift_info["required_skill"]
+    required_skill = shift_info["required_skill"]
 
     max_cost_estimate = max(
         (row.get("hourly_cost", 100) * shift_info["hours"] for _, row in doctors_df.iterrows()),
@@ -613,20 +728,29 @@ def find_replacement_pandemic(
 
     replacement_candidates = []
 
-    # --- Lekarze z harmonogramu ---
-    for name in active_doctors:
-        doc_row = doctors_df[doctors_df["name"] == name]
+    schedule_df_copy = schedule_df.copy()
+    schedule_df_copy["Date"] = pd.to_datetime(schedule_df_copy["Date"])
+
+    for doc_name in stats_df["Doctor"].unique():
+        if doc_name == sick_doctor or pd.isna(doc_name):
+            continue
+
+        doc_row = doctors_df[doctors_df["name"] == doc_name]
         if doc_row.empty:
             continue
-        doc_row    = doc_row.iloc[0]
-        doc_id     = doc_row["id"]
+
+        doc_row = doc_row.iloc[0]
+        doc_id = doc_row["id"]
         doc_bubble = bubble_assignment.get(doc_id, -1)
 
-        # REGUŁA PANDEMICZNA
         if is_contact_dept and doc_bubble != sick_bubble:
             continue
 
-        if any(s["date"] == shift_info["date"] for s in schedule_index.get(name, [])):
+        doc_shifts_that_day = schedule_df_copy[
+            (schedule_df_copy["Doctor"] == doc_name)
+            & (schedule_df_copy["Date"].dt.strftime("%Y-%m-%d") == shift_info["date"])
+        ]
+        if not doc_shifts_that_day.empty:
             continue
 
         skill_list = (
@@ -637,43 +761,46 @@ def find_replacement_pandemic(
         skill_ok = required_skill == "" or required_skill in skill_list
 
         is_night = "_N_" in shift_code or shift_info["hours"] == 24
-        is_24h   = shift_info["hours"] == 24
-        if is_night and doc_row.get("night_allowed", 1) == 0:
+        is_24h = shift_info["hours"] == 24
+
+        if is_night and int(doc_row.get("night_allowed", 1) or 0) == 0:
             continue
-        if is_24h and doc_row.get("twentyfour_allowed", 1) == 0:
+        if is_24h and int(doc_row.get("twentyfour_allowed", 1) or 0) == 0:
             continue
 
-        shift_dt     = pd.to_datetime(shift_info["date"])
-        start_date   = pd.to_datetime(schedule_df["Date"].min())
-        start_monday = start_date - pd.Timedelta(days=start_date.weekday())
-        local_week   = int((shift_dt - start_monday).days // 7)
-        wlimit       = weekly_limits.get(doc_id, {}).get(local_week)
+        stats_row = stats_df[stats_df["Doctor"] == doc_name]
+        hard_shifts_count = (
+            int(stats_row["HardCount"].iloc[0]) if not stats_row.empty else 0
+        )
+        workload_pct = (
+            float(stats_row["UtilizationPct"].iloc[0]) if not stats_row.empty else 0.0
+        )
+        extra_cost = int(doc_row.get("hourly_cost", 0)) * shift_info["hours"]
 
-        rest_ok, rest_warnings = _check_rest_rules(
-            schedule_index.get(name, []), shift_info, date_index, weekly_limit=wlimit
+        score = (
+            (100 if not skill_ok else 0)
+            + (50 if is_night and int(doc_row.get("night_allowed", 1) or 0) == 0 else 0)
+            + (int(workload_pct) // 10)
+            + (hard_shifts_count * 5)
         )
 
-        stats_row         = stats_df[stats_df["Doctor"] == name]
-        hard_shifts_count = int(stats_row["HardCount"].iloc[0]) if not stats_row.empty else 0
-        workload_pct      = float(stats_row["UtilizationPct"].iloc[0]) if not stats_row.empty else 0.0
-        extra_cost        = int(doc_row.get("hourly_cost", 0)) * shift_info["hours"]
-
-        score, score_components = _score_candidate(
-            rest_ok=rest_ok, skill_ok=skill_ok, extra_cost=extra_cost,
-            hard_shifts=hard_shifts_count, workload_pct=workload_pct,
-            source="schedule", max_cost=max_cost_estimate,
+        replacement_candidates.append(
+            {
+                "name": doc_name,
+                "source": "schedule",
+                "role": doc_row.get("role", ""),
+                "bubble": doc_bubble,
+                "rest_ok": True,
+                "skill_ok": skill_ok,
+                "extra_cost": extra_cost,
+                "workload_pct": workload_pct,
+                "hard_shifts": hard_shifts_count,
+                "score": score,
+                "warnings": [],
+                "score_components": {},
+            }
         )
 
-        replacement_candidates.append({
-            "name": name,            "source": "schedule",
-            "role": doc_row.get("role", ""), "bubble": doc_bubble,
-            "rest_ok": rest_ok,      "skill_ok": skill_ok,
-            "extra_cost": extra_cost, "workload_pct": workload_pct,
-            "hard_shifts": hard_shifts_count, "score": score,
-            "warnings": rest_warnings, "score_components": score_components,
-        })
-
-    # --- Rezerwa zewnętrzna ---
     if reserve_doctors_df is not None and config.allow_cross_bubble_reserve:
         for _, res in reserve_doctors_df.iterrows():
             skill_list = (
@@ -684,64 +811,66 @@ def find_replacement_pandemic(
             skill_ok = required_skill == "" or required_skill in skill_list
 
             if "_N_" in shift_code or shift_info["hours"] == 24:
-                if res.get("night_allowed", 1) == 0:
+                if int(res.get("night_allowed", 1) or 0) == 0:
                     continue
-            if shift_info["hours"] == 24 and res.get("twentyfour_allowed", 1) == 0:
+            if shift_info["hours"] == 24 and int(res.get("twentyfour_allowed", 1) or 0) == 0:
                 continue
 
             extra_cost = int(res.get("hourly_cost", 0)) * shift_info["hours"]
-            score, score_components = _score_candidate(
-                rest_ok=True, skill_ok=skill_ok, extra_cost=extra_cost,
-                hard_shifts=0, workload_pct=0.0,
-                source="reserve", max_cost=max_cost_estimate,
-            )
+            score = (100 if not skill_ok else 0) + extra_cost // 100
 
-            replacement_candidates.append({
-                "name": res["name"],   "source": "reserve",
-                "role": res.get("role", ""), "bubble": "external",
-                "rest_ok": True,       "skill_ok": skill_ok,
-                "extra_cost": extra_cost, "workload_pct": 0.0,
-                "hard_shifts": 0,      "score": score,
-                "warnings": [
-                    "REZERWA — izolowana od systemu bańek",
-                    "Wymagane potwierdzenie dostępności",
-                ],
-                "score_components": score_components,
-            })
+            replacement_candidates.append(
+                {
+                    "name": res["name"],
+                    "source": "reserve",
+                    "role": res.get("role", ""),
+                    "bubble": "external",
+                    "rest_ok": True,
+                    "skill_ok": skill_ok,
+                    "extra_cost": extra_cost,
+                    "workload_pct": 0.0,
+                    "hard_shifts": 0,
+                    "score": score,
+                    "warnings": [
+                        "EXTERNAL RESERVE — isolated from the bubble system",
+                        "Availability confirmation required",
+                    ],
+                    "score_components": {},
+                }
+            )
 
     replacement_candidates.sort(
         key=lambda c: (not (c["rest_ok"] and c["skill_ok"]), c["score"])
     )
 
     valid = [c for c in replacement_candidates if c["rest_ok"] and c["skill_ok"]]
-    best  = valid[0] if valid else None
+    best = valid[0] if valid else None
 
     fallback_message = None
     if not replacement_candidates:
         fallback_message = (
-            f"Brak kandydatów w bańce {sick_bubble} na zmianę {shift_code}. "
-            "Wszyscy mogą być na kwarantannie. Aktywuj rezerwę zewnętrzną."
+            f"No candidates available in bubble {sick_bubble} for shift {shift_code}. "
+            "All physicians may be quarantined. Activate external reserve staff."
         )
     elif best is None:
         fallback_message = (
-            f"Kandydaci w bańce {sick_bubble} nie spełniają wymagań "
-            "kompetencji + odpoczynku. Wymagana rezerwa lub złagodzenie reguł."
+            f"Candidates in bubble {sick_bubble} do not satisfy "
+            "the competency requirements. Reserve staff or rule changes are required."
         )
 
     return {
-        "shift_code": shift_code,        "sick_doctor": sick_doctor,
-        "sick_bubble": sick_bubble,      "shift_info": shift_info,
+        "shift_code": shift_code,
+        "sick_doctor": sick_doctor,
+        "sick_bubble": sick_bubble,
+        "shift_info": shift_info,
         "candidates": replacement_candidates,
-        "recommendation": best,          "fallback_message": fallback_message,
+        "recommendation": best,
+        "fallback_message": fallback_message,
         "pandemic_mode": True,
         "bubble_restrictions_applied": is_contact_dept,
         "is_contact_dept": is_contact_dept,
     }
 
-
-# ---------------------------------------------------------------------------
-# HELPERS DLA UI
-# ---------------------------------------------------------------------------
 
 def bubble_contact_matrix(
     schedule_df: pd.DataFrame,
@@ -750,8 +879,9 @@ def bubble_contact_matrix(
     contact_depts: list[str],
 ) -> pd.DataFrame:
     """
-    Liczy ile razy pary bańek dzieliły zmianę w działach kontaktowych.
-    W poprawnym rozwiązaniu = 0 wszędzie.
+    Counts how many times pairs of bubbles shared a shift
+    in contact departments.
+    In a valid solution, all values should equal 0.
     """
     contact_df = schedule_df[
         schedule_df["Dept"].isin(contact_depts) &
@@ -791,7 +921,7 @@ def bubble_summary_df(
     id_to_role: dict[int, str],
     num_bubbles: int,
 ) -> pd.DataFrame:
-    """DataFrame [Doctor, Role, Bubble] — do wyświetlenia w Streamlicie."""
+    """DataFrame [Doctor, Role, Bubble] — for display in Streamlit."""
     rows = [
         {"Doctor": id_to_name.get(d, str(d)), "Role": id_to_role.get(d, ""), "Bubble": b}
         for d, b in bubble_assignment.items()

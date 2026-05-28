@@ -1,39 +1,115 @@
 """
-pandemic_ui.py
-==============
 Streamlit UI component for the Pandemic Mode tab.
-
-Add to your main app.py:
-
-    from pandemic_ui import render_pandemic_tab
-
-    with st.tabs(["...", "🦠 Pandemic Mode"])[pandemic_tab_index]:
-        render_pandemic_tab(results, doctors, id_to_name, id_to_role)
-
-Expected inputs:
-    results      : run_scenario() output (baseline or hire_allowed)
-    doctors      : doctors DataFrame
-    id_to_name   : {doctor_id -> doctor_name}
-    id_to_role   : {doctor_id -> role}
 """
 
 import streamlit as st
 import pandas as pd
 import altair as alt
+from streamlit_calendar import calendar
+from datetime import datetime, timedelta
 
 from pandemic_mode import (
     PandemicConfig,
-    greedy_bubble_assignment,
     bubble_summary_df,
     bubble_contact_matrix,
     simulate_quarantine,
     find_replacement_pandemic,
 )
 
+# CALENDAR
 
-# ---------------------------------------------------------------------------
+def schedule_to_pandemic_calendar_events(
+    schedule_df: pd.DataFrame,
+    bubble_assignment: dict,
+    name_to_id: dict,
+    contact_depts: list[str],
+) -> list[dict]:
+    """
+    Builds streamlit_calendar events colored by bubble assignment.
+
+    Contact shifts (WARD/ICU) use full bubble colors.
+    Non-contact shifts (CLINIC) use muted colors.
+    Uncovered shifts are shown in red.
+    """
+    BUBBLE_COLORS = {
+        0: "#3b82f6",  # blue
+        1: "#10b981",  # green
+        2: "#f59e0b",  # orange
+        3: "#ec4899",  # pink
+        4: "#8b5cf6",  # purple
+    }
+    BUBBLE_COLORS_MUTED = {
+        0: "#93c5fd",
+        1: "#6ee7b7",
+        2: "#fcd34d",
+        3: "#f9a8d4",
+        4: "#c4b5fd",
+    }
+
+    events = []
+    contact_set = set(contact_depts)
+
+    for _, row in schedule_df.iterrows():
+        date = row["Date"]
+        if hasattr(date, "strftime"):
+            date_str = date.strftime("%Y-%m-%d")
+        else:
+            date_str = str(date)[:10]
+
+        start_hour = int(row["StartHour"])
+        end_hour_raw = int(row["EndHour"])
+
+        start_dt = datetime.fromisoformat(f"{date_str} {start_hour:02d}:00")
+        if end_hour_raw <= 24:
+            end_dt = datetime.fromisoformat(f"{date_str} {end_hour_raw:02d}:00")
+        else:
+            end_dt = datetime.fromisoformat(
+                f"{date_str} {(end_hour_raw - 24):02d}:00"
+            ) + timedelta(days=1)
+
+        if row["Missing"] == 1:
+            # title = f"{row['ShiftCode']} – UNCOVERED"
+            short_code = row["ShiftCode"]
+            if "_20" in short_code:
+                short_code = short_code.split("_20")[0]
+            title = f"{short_code} – UNCOVERED"
+            color = "#e74c3c"
+        else:
+            doc_name = row["Doctor"]
+            doc_id = name_to_id.get(doc_name)
+            bubble = bubble_assignment.get(doc_id)
+            is_contact = row["Dept"] in contact_set
+
+            if bubble is None:
+                color = "#9ca3af"
+            elif is_contact:
+                color = BUBBLE_COLORS.get(bubble, "#6b7280")
+            else:
+                color = BUBBLE_COLORS_MUTED.get(bubble, "#d1d5db")
+
+            bubble_label = f"B{bubble}" if bubble is not None else "?"
+            short_code = row["ShiftCode"]
+            if "_20" in short_code:
+                short_code = short_code.split("_20")[0]
+            short_name = doc_name
+            if doc_name and doc_name.lower().startswith("doctor"):
+                short_name = "D" + doc_name[6:]
+
+            title = f"[{bubble_label}] {short_code} {short_name}"
+
+            # title = f"[{bubble_label}] {row['ShiftCode']} – {doc_name}"
+
+        events.append({
+            "title": title,
+            "start": start_dt.isoformat(),
+            "end": end_dt.isoformat(),
+            "color": color,
+        })
+
+    return events
+
+
 # MAIN RENDER
-# ---------------------------------------------------------------------------
 
 def render_pandemic_tab(
     results: dict,
@@ -42,7 +118,7 @@ def render_pandemic_tab(
     id_to_role: dict,
     reserve_doctors_df: pd.DataFrame | None = None,
 ):
-    st.header("🦠 Pandemic Mode")
+    st.header("Pandemic Mode")
 
     st.markdown("""
     Epidemic/pandemic scheduling mode. Doctors are divided into **isolated bubble teams**
@@ -53,63 +129,79 @@ def render_pandemic_tab(
     > Clinic (outpatient) shifts are excluded — separate rooms, lower transmission risk.
     """)
 
+    pandemic_data = results.get("pandemic")
+
+    if pandemic_data is None:
+        st.warning(
+            "Pandemic mode was not enabled during optimization."
+        )
+        return
+
+    config = pandemic_data["config"]
+    bubble_assignment = pandemic_data["bubble_assignment"]
+
+    num_bubbles = config.num_bubbles
+    contact_depts = config.contact_depts
+
     # =====================================================================
-    # SECTION 1: CONFIGURATION
+    # BUBBLE ASSIGNMENT
     # =====================================================================
-    st.subheader("⚙️ Bubble Configuration")
+    st.subheader("Bubble Assignment")
 
-    col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+    validation = pandemic_data.get("validation")
 
-    with col_cfg1:
-        num_bubbles = st.slider(
-            "Number of bubbles",
-            min_value=2, max_value=5, value=3,
-            help="Typically 2–4. More bubbles = smaller teams, more resilience but tighter staffing."
-        )
+    if validation is not None:
+        st.subheader("Bubble Validation")
 
-    with col_cfg2:
-        contact_depts = st.multiselect(
-            "Contact departments",
-            options=["WARD", "ICU", "CLINIC"],
-            default=["WARD", "ICU"],
-            help="Departments where sharing a shift = infection contact."
-        )
+        is_safe = validation.get("is_safe", True)
+        issues = validation.get("issues", [])
+        validation_df = validation.get("validation_df")
 
-    with col_cfg3:
-        min_spec = st.number_input(
-            "Min specialists per bubble",
-            min_value=1, max_value=5, value=1,
-            help="Each bubble must contain at least this many specialists to be clinically viable."
-        )
+        if is_safe and not issues:
+            st.success("All bubbles satisfy the minimum requirements.")
+        elif is_safe:
+            st.info(
+                f"The bubbles are safe, but {len(issues)} warnings were detected."
+            )
+        else:
+            errors = [i for i in issues if i["severity"] == "ERROR"]
+            st.error(
+                f"{len(errors)} critical bubble issues detected. "
+                "The schedule may be infeasible or require significant slack. "
+                "Consider changing the bubble assignment or reducing the number of bubbles."
+            )
 
-    config = PandemicConfig(
-        num_bubbles=num_bubbles,
-        contact_depts=contact_depts,
-        bubble_assignment="auto",
-        min_specialists_per_bubble=min_spec,
+        if validation_df is not None and not validation_df.empty:
+            def color_status(val):
+                if val == "OK":
+                    return "background-color: #d4edda; color: #155724"
+                elif val == "PROBLEM":
+                    return "background-color: #f8d7da; color: #721c24"
+                return ""
+
+            styled = validation_df.style.applymap(
+                color_status, subset=["Status"]
+            )
+            st.dataframe(styled, width="stretch")
+
+        if issues:
+            with st.expander(f"Wykryte problemy ({len(issues)})"):
+                for issue in issues:
+                    icon = {
+                        "ERROR": "🔴",
+                        "WARNING": "🟡",
+                        "INFO": "🔵",
+                    }.get(issue["severity"], "•")
+                    st.write(f"{icon} **{issue['severity']}** — {issue['message']}")
+
+    st.success(
+        "This schedule was optimized with pandemic constraints enabled."
     )
-
-    # =====================================================================
-    # SECTION 2: BUBBLE ASSIGNMENT
-    # =====================================================================
-    st.subheader("👥 Bubble Assignment")
 
     name_to_id = {v: k for k, v in id_to_name.items()}
 
-    @st.cache_data(show_spinner="Assigning doctors to bubbles...")
-    def get_bubble_assignment(_doctors, _num_bubbles, _min_spec, _config_hash):
-        return greedy_bubble_assignment(
-            doctors_df=_doctors,
-            num_bubbles=_num_bubbles,
-            min_specialists_per_bubble=_min_spec,
-        )
-
-    config_hash = f"{num_bubbles}_{min_spec}_{','.join(sorted(contact_depts))}"
-    bubble_assignment = get_bubble_assignment(doctors, num_bubbles, min_spec, config_hash)
-
     summary = bubble_summary_df(bubble_assignment, id_to_name, id_to_role, num_bubbles)
 
-    # Bubble size stats
     col_b = st.columns(num_bubbles)
     for b in range(num_bubbles):
         b_df = summary[summary["Bubble"] == b]
@@ -123,7 +215,7 @@ def render_pandemic_tab(
             )
 
     with st.expander("Show full bubble assignment", expanded=False):
-        # Color coding per bubble
+
         def highlight_bubble(row):
             colors = ["#dbeafe", "#dcfce7", "#fef9c3", "#fce7f3", "#ede9fe"]
             color = colors[int(row["Bubble"]) % len(colors)]
@@ -135,8 +227,7 @@ def render_pandemic_tab(
             height=400,
         )
 
-    # Contact validation heatmap
-    st.subheader("🔍 Contact Validation")
+    st.subheader("Contact Validation")
     st.caption(
         "A valid pandemic schedule should show **zero cross-bubble contacts** "
         "in contact departments (WARD/ICU). Any violations below indicate "
@@ -151,13 +242,16 @@ def render_pandemic_tab(
     )
 
     if contact_matrix.empty:
-        st.success("✅ No cross-bubble contacts detected in contact departments.")
+        st.success("No cross-bubble contacts detected in contact departments.")
     else:
         total_violations = int(contact_matrix["ContactCount"].sum())
         st.error(
-            f"⚠️ {total_violations} cross-bubble contact events detected. "
-            "This schedule was optimized **without** pandemic constraints. "
-            "Re-run the solver with pandemic mode enabled to fix this."
+            f"{total_violations} emergency cross-bubble contacts detected."
+        )
+
+        st.caption(
+            "These violations were allowed only because the solver "
+            "used emergency relaxation variables to preserve feasibility."
         )
 
         chart_violations = (
@@ -182,16 +276,72 @@ def render_pandemic_tab(
         with st.expander("Raw contact events"):
             st.dataframe(contact_matrix, width="stretch")
 
-    st.info(
-        "💡 To schedule **with** pandemic constraints, pass the `PandemicConfig` "
-        "to `add_pandemic_constraints()` in `build_model()`. "
-        "This will enforce bubble isolation at the solver level."
+    pandemic_bundle = results.get("pandemic_bundle")
+
+    if pandemic_bundle is not None:
+        violations = pandemic_bundle.get(
+            "crossbubble_violations",
+            []
+        )
+
+        st.metric(
+            "Emergency cross-bubble violations",
+            len(violations)
+        )
+
+    # =====================================================================
+    # CALENDAR
+    # =====================================================================
+    st.subheader("Pandemic Schedule – Bubble Calendar View")
+
+    st.caption(
+        "Pandemic schedule calendar colored by bubble assignment. "
+        "Full colors = contact shifts (WARD/ICU), muted colors = "
+        "non-contact shifts (CLINIC), red = uncovered, gray = unassigned."
+    )
+
+    legend_cols = st.columns(num_bubbles + 1)
+    BUBBLE_LEGEND_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"]
+    for b in range(num_bubbles):
+        with legend_cols[b]:
+            st.markdown(
+                f"<div style='background-color:{BUBBLE_LEGEND_COLORS[b % 5]};"
+                f"padding:8px;border-radius:5px;text-align:center;color:white;"
+                f"font-weight:bold;'>Bubble {b}</div>",
+                unsafe_allow_html=True
+            )
+    with legend_cols[num_bubbles]:
+        st.markdown(
+            "<div style='background-color:#e74c3c;padding:8px;border-radius:5px;"
+            "text-align:center;color:white;font-weight:bold;'>Uncovered</div>",
+            unsafe_allow_html=True
+        )
+
+    pandemic_events = schedule_to_pandemic_calendar_events(
+        schedule_df=results["schedule_df"],
+        bubble_assignment=bubble_assignment,
+        name_to_id=name_to_id,
+        contact_depts=contact_depts,
+    )
+
+    pandemic_cal_options = {
+        "initialView": "dayGridMonth",
+        "initialDate": str(
+            pd.to_datetime(results["schedule_df"]["Date"]).min().date()
+        ),
+        "height": 700,
+    }
+
+    calendar(
+        events=pandemic_events,
+        options=pandemic_cal_options,
+        key="pandemic_calendar",
     )
 
     # =====================================================================
-    # SECTION 3: QUARANTINE SIMULATION
+    # QUARANTINE SIMULATION
     # =====================================================================
-    st.subheader("🔴 Quarantine Simulation")
+    st.subheader("Quarantine Simulation")
 
     st.markdown(
         "Simulate what happens if one bubble is quarantined due to exposure. "
@@ -204,15 +354,17 @@ def render_pandemic_tab(
         format_func=lambda b: f"Bubble {b} ({sum(1 for bb in bubble_assignment.values() if bb == b)} doctors)"
     )
 
-    quarantine_result = simulate_quarantine(
+    from pandemic_mode import simulate_quarantine_with_reserve
+
+    quarantine_result = simulate_quarantine_with_reserve(
         results=results,
         quarantine_bubble=quarantine_bubble,
         bubble_assignment=bubble_assignment,
         id_to_name=id_to_name,
         config=config,
+        reserve_doctors_df=reserve_doctors_df,
     )
 
-    # Severity color
     severity_color = {
         "LOW": "success",
         "MEDIUM": "warning",
@@ -227,7 +379,6 @@ def render_pandemic_tab(
     col_q3.metric("Coverage impact", f"{quarantine_result['coverage_impact_pct']}%")
     col_q4.metric("Days affected", quarantine_result["days_affected"])
 
-    # Department breakdown
     if quarantine_result["dept_impact"]:
         dept_df = pd.DataFrame(
             list(quarantine_result["dept_impact"].items()),
@@ -254,8 +405,65 @@ def render_pandemic_tab(
         else:
             st.dataframe(quarantine_result["uncovered_shifts"], width="stretch")
 
-    # Remaining bubble capacity comparison
-    st.subheader("📊 Bubble Capacity Overview")
+    # =====================================================================
+    # RESERVE ACTIVATION
+    # =====================================================================
+    st.subheader("Reserve Activation")
+
+    if not quarantine_result.get("reserve_available"):
+        st.warning("No reserve physician pool available — reserve activation impossible.")
+    else:
+        col_r1, col_r2, col_r3 = st.columns(3)
+        col_r1.metric(
+            "Covered by reserve",
+            quarantine_result["covered_by_reserve"],
+            delta=f"-{quarantine_result['covered_by_reserve']} from gap",
+            delta_color="inverse"
+        )
+        col_r2.metric(
+            "Residual uncovered",
+            quarantine_result["residual_gap"],
+        )
+        col_r3.metric(
+            "Reserve cost",
+            f"{quarantine_result.get('reserve_total_cost', 0):,} PLN"
+        )
+
+        if quarantine_result["residual_gap"] == 0:
+            st.success(
+                "Reserve staff covers all lost shifts. "
+                "The hospital can continue full operations."
+            )
+        elif quarantine_result["residual_gap"] < quarantine_result["covered_by_reserve"]:
+            st.info(
+                f"Reserve staff covers most losses. "
+                f"{quarantine_result['residual_gap']} shifts remain uncovered — "
+                f"consider temporarily closing some outpatient clinics "
+                f"or reducing staffing demand."
+            )
+
+        else:
+            st.error(
+                f"Even with reserve staff, most shifts cannot be covered. "
+                f"Operational restructuring required: clinic closures, "
+                f"cancellation of elective procedures, escalation to hospital management."
+            )
+
+        if not quarantine_result["reserve_assignments"].empty:
+            with st.expander(f"Reserve assignments ({quarantine_result['covered_by_reserve']} shifts)"):
+                st.dataframe(
+                    quarantine_result["reserve_assignments"],
+                    width="stretch"
+                )
+
+        if quarantine_result["residual_gap"] > 0:
+            with st.expander(f"Still uncovered ({quarantine_result['residual_gap']} shifts)"):
+                st.dataframe(
+                    quarantine_result["residual_uncovered"],
+                    width="stretch"
+                )
+
+    st.subheader("Bubble Capacity Overview")
 
     bubble_stats = []
     for b in range(num_bubbles):
@@ -300,16 +508,19 @@ def render_pandemic_tab(
     st.altair_chart(bubble_bar, use_container_width=True)
 
     # =====================================================================
-    # SECTION 4: PANDEMIC EMERGENCY REPLACEMENT
+    # PANDEMIC EMERGENCY REPLACEMENT
     # =====================================================================
-    st.subheader("🚨 Emergency Replacement (Pandemic Mode)")
+    st.subheader("Emergency Replacement (Pandemic Mode)")
 
     st.markdown(
         "In pandemic mode, replacements are restricted to **same-bubble doctors**. "
         "New hires (candidates) are disabled. Reserve staff can be used with confirmation."
     )
 
-    # Build shift options: only assigned shifts
+    st.caption(
+        "Replacement search is restricted to the same bubble whenever possible."
+    )
+
     assigned_shifts = results["schedule_df"].dropna(subset=["Doctor"])
     shift_options = [
         f"{row['ShiftCode']}__{row['Doctor']}"
@@ -363,7 +574,7 @@ def render_pandemic_tab(
         )
 
         msg = (
-            f"✅ Recommended: **{best['name']}** "
+            f"Recommended: **{best['name']}** "
             f"({bubble_label}) "
             f"| Cost +{best['extra_cost']} PLN"
         )
@@ -378,7 +589,7 @@ def render_pandemic_tab(
         f"**Dept:** {shift_info_disp.get('dept')} | "
         f"**Hours:** {shift_info_disp.get('start')}–{shift_info_disp.get('end')} | "
         f"**Required skill:** {shift_info_disp.get('required_skill', '—')} | "
-        f"**Contact dept:** {'Yes 🔴' if rep_result.get('is_contact_dept') else 'No 🟢'}"
+        f"**Contact dept:** {'Yes' if rep_result.get('is_contact_dept') else 'No'}"
     )
 
     candidates_df_rep = pd.DataFrame(rep_result["candidates"])
@@ -417,53 +628,3 @@ def render_pandemic_tab(
             .properties(height=300, title="Replacement candidates ranking")
         )
         st.altair_chart(chart_rep, use_container_width=True)
-
-    # =====================================================================
-    # SECTION 5: HOW TO ENABLE IN SOLVER
-    # =====================================================================
-    with st.expander("📖 How to enable pandemic constraints in the solver", expanded=False):
-        st.code("""
-# In model_ref.py, inside build_model(), after all hard constraints:
-
-from pandemic_mode import PandemicConfig, add_pandemic_constraints, greedy_bubble_assignment
-
-# 1. Define config
-pandemic_config = PandemicConfig(
-    num_bubbles=3,
-    contact_depts=["WARD", "ICU"],
-    bubble_assignment="static",   # use greedy pre-assignment
-    min_specialists_per_bubble=1,
-)
-
-# 2. Pre-assign bubbles (fast, no extra solver variables)
-bubble_assignment = greedy_bubble_assignment(
-    doctors_df=pd.concat([doctors, candidates]),
-    num_bubbles=pandemic_config.num_bubbles,
-    min_specialists_per_bubble=pandemic_config.min_specialists_per_bubble,
-)
-
-# 3. Add constraints
-pandemic_vars = add_pandemic_constraints(
-    model=model,
-    x=x,
-    D_all=D_all,
-    S=S,
-    shifts=shifts,
-    shift_idx=shift_idx,
-    config=pandemic_config,
-    id_to_role=id_to_role,
-    static_assignment=bubble_assignment,
-)
-
-# 4. Store in bundle for later use
-bundle["pandemic_vars"] = pandemic_vars
-bundle["bubble_assignment"] = bubble_assignment
-        """, language="python")
-
-        st.markdown("""
-**Performance note:** Using `bubble_assignment="static"` with `greedy_bubble_assignment()`
-adds only O(D×S) pairwise constraints and has minimal impact on solver runtime.
-
-The `auto` mode (solver assigns bubbles) adds O(D×B + S×D×B) variables and is
-significantly slower — use only for small instances (<20 doctors).
-        """)
