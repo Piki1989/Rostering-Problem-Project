@@ -3,3 +3,5 @@ id,name,role,skills,hourly_cost,night_allowed,twentyfour_allowed
 1002,Doctor1002,Part-time Specialist,ward;clinic_general,170,1,0
 1003,Doctor1003,Senior Consultant,icu;ward,250,0,0
 1004,Doctor1004,Locum Doctor,ward,190,1,1
+1005,Doctor1005,Part-time Specialist,ward;clinic_general;icu,200,1,1
+1006,Doctor1006,Part-time Specialist,ward;icu,180,0,0

@@ -185,7 +185,7 @@ def render_pandemic_tab(
             st.dataframe(styled, width="stretch")
 
         if issues:
-            with st.expander(f"Wykryte problemy ({len(issues)})"):
+            with st.expander(f"Detected issues ({len(issues)})"):
                 for issue in issues:
                     icon = {
                         "ERROR": "🔴",
@@ -324,19 +324,71 @@ def render_pandemic_tab(
         contact_depts=contact_depts,
     )
 
+    view_options = {
+        "Month": "dayGridMonth",
+        "Week": "timeGridWeek",
+        "Day": "timeGridDay",
+        "List (most readable)": "listWeek",
+    }
+    selected_view_label = st.selectbox(
+        "Calendar view",
+        list(view_options.keys()),
+        index=0,
+        key="pandemic_calendar_view",
+        help="List view shows full doctor names and shift codes without truncation."
+    )
+    selected_view = view_options[selected_view_label]
+
     pandemic_cal_options = {
-        "initialView": "dayGridMonth",
+        "initialView": selected_view,
         "initialDate": str(
             pd.to_datetime(results["schedule_df"]["Date"]).min().date()
         ),
         "height": 700,
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,timeGridWeek,timeGridDay,listWeek",
+        },
+        "dayMaxEvents": False,
+        "eventDisplay": "block",
+        "eventClassNames": "compact-event",
     }
+
+    st.markdown("""
+    <style>
+    .fc-event-title {
+        font-size: 0.75em !important;
+        line-height: 1.1 !important;
+    }
+    .fc-list-event-title {
+        font-size: 0.9em !important;
+    }
+    .fc-event {
+        padding: 1px 3px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     calendar(
         events=pandemic_events,
         options=pandemic_cal_options,
-        key="pandemic_calendar",
+        key=f"pandemic_calendar_{selected_view}",
     )
+
+    # pandemic_cal_options = {
+    #     "initialView": "dayGridMonth",
+    #     "initialDate": str(
+    #         pd.to_datetime(results["schedule_df"]["Date"]).min().date()
+    #     ),
+    #     "height": 700,
+    # }
+    #
+    # calendar(
+    #     events=pandemic_events,
+    #     options=pandemic_cal_options,
+    #     key="pandemic_calendar",
+    # )
 
     # =====================================================================
     # QUARANTINE SIMULATION
@@ -409,6 +461,12 @@ def render_pandemic_tab(
     # RESERVE ACTIVATION
     # =====================================================================
     st.subheader("Reserve Activation")
+
+    st.caption(
+        "Reserve activation provides an operational feasibility estimate only. "
+        "Final assignments require manual validation of labor-law constraints "
+        "(e.g., 11-hour rest periods, weekly workload limits)."
+    )
 
     if not quarantine_result.get("reserve_available"):
         st.warning("No reserve physician pool available — reserve activation impossible.")

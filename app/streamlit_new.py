@@ -21,6 +21,8 @@ EXPORT_ROOT.mkdir(exist_ok=True)
 from model.model_ref import run_model_and_get_results
 from model.emergency_replacement_new import find_replacement, precompute_replacements
 
+from pandemic_ui import render_pandemic_tab
+
 def filter_active_doctors(data: dict) -> dict:
     stats = data["stats_df"]
     active_names = set(stats.loc[stats["TotalHours"] > 0, "Doctor"])
@@ -698,9 +700,11 @@ Comparison of two scenarios:
 - **Hire allowed** – hiring candidates is permitted
 """)
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def run_model():
-    return run_model_and_get_results()
+    return run_model_and_get_results(
+        pandemic_mode=True
+    )
 
 with st.spinner("Running optimization model (this may take a few minutes)..."):
     results = run_model()
@@ -797,8 +801,6 @@ def components_df(eff):
         )
         .assign(Score_pct=lambda df: (df["Score (0–1)"] * 100).round(1))
     )
-
-st.metric("Hospital Efficiency (Baseline)", baseline_eff["HospitalEfficiencyScore"])
 
 
 st.metric(
@@ -1270,7 +1272,6 @@ selected_key = st.selectbox(
 )
 
 res = replacements[selected_key]
-
 info = res["shift_info"]
 
 st.markdown(f"""
@@ -1288,42 +1289,22 @@ candidates_df = pd.DataFrame(res["candidates"])
 
 if not candidates_df.empty:
 
-    # === STATUS COLUMN ===
     def get_status(r):
         if r["source"] == "reserve":
             return "Reserve (call required)"
-
-        # standardowa logika
         if r["rest_ok"] and r["skill_ok"]:
             return "OK"
-
         return "Violation"
 
-
     candidates_df["status"] = candidates_df.apply(get_status, axis=1)
-
-    # === SORT ===
     candidates_df = candidates_df.sort_values("score")
 
     st.subheader("Candidates ranking")
-
     st.dataframe(
-        candidates_df[
-            [
-                "name",
-                "source",
-                "score",
-                "extra_cost",
-                "workload_pct",
-                "hard_shifts",
-                "status"
-            ]
-        ],
+        candidates_df[["name", "source", "score", "extra_cost",
+                        "workload_pct", "hard_shifts", "status"]],
         width="stretch"
     )
-
-    # === BAR CHART SCORE ===
-    st.subheader("Candidate scores")
 
     chart = (
         alt.Chart(candidates_df.head(10))
@@ -1342,39 +1323,31 @@ if not candidates_df.empty:
         )
         .properties(height=350)
     )
-
     st.altair_chart(chart, width="stretch")
 
-    # === BEST ===
     if res["recommendation"]:
         best = res["recommendation"]
-
         msg = (
             f"Recommended: **{best['name']}** "
             f"({best['source']}) | cost +{best['extra_cost']} PLN"
         )
-
         if best["source"] == "reserve":
             st.warning("⚠ Reserve doctor selected — confirmation required")
-
         st.success(msg)
 
         if best["warnings"]:
             for w in best["warnings"]:
                 st.warning(w)
 
-    # === WARNINGS EXPANDER ===
-    with st.expander("⚠ Candidate warnings"):
+    with st.expander("Candidate warnings"):
         for c in res["candidates"]:
             if c["warnings"]:
                 st.write(f"**{c['name']}**:")
                 for w in c["warnings"]:
                     st.write(f"- {w}")
 
-
 if "score_components" in candidates_df.columns:
     st.subheader("Score breakdown")
-
     comp_rows = []
     for _, row in candidates_df.head(5).iterrows():
         sc = row.get("score_components", {})
@@ -1385,9 +1358,7 @@ if "score_components" in candidates_df.columns:
                     "Component": k,
                     "Value": v
                 })
-
     comp_df = pd.DataFrame(comp_rows)
-
     if not comp_df.empty:
         chart2 = (
             alt.Chart(comp_df)
@@ -1400,8 +1371,20 @@ if "score_components" in candidates_df.columns:
             )
             .properties(height=350)
         )
-
         st.altair_chart(chart2, width="stretch")
 
+
+# PANDEMIC TAB
+
+_id_to_name = {row["id"]: row["name"] for _, row in baseline["doctors"].iterrows()}
+_id_to_role = {row["id"]: row["role"] for _, row in baseline["doctors"].iterrows()}
+
+render_pandemic_tab(
+    results=baseline,
+    doctors=baseline["doctors"],
+    id_to_name=_id_to_name,
+    id_to_role=_id_to_role,
+    reserve_doctors_df=reserve_df,
+)
 
 st.success("Optimization finished successfully.")

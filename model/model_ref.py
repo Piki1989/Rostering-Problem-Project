@@ -495,6 +495,27 @@ def build_model(
         slacks_o[s] = slack_o
         model.Add(sum(x[(d, s)] for d in D) + slack_o <= regular_staff)
 
+    # === SLACK WEIGHTS (pandemic prioritization) ===
+    # In pandemic mode, ICU/WARD coverage is much more critical than CLINIC.
+    # Outpatient clinics can be temporarily reduced/closed during a crisis,
+    # while ICU patients require continuous care.
+    slack_weights = {}
+    for _, shift in shifts.iterrows():
+        s = shift["id"]
+        dept = shift["dept"]
+
+        if pandemic_config is not None:
+            if dept == "ICU":
+                slack_weights[s] = 100
+            elif dept == "WARD":
+                slack_weights[s] = 50
+            elif dept == "CLINIC":
+                slack_weights[s] = 1
+            else:
+                slack_weights[s] = 10
+        else:
+            slack_weights[s] = 1
+
     """ SOFT CONSTRAINTS """
     pref_terms = []
 
@@ -704,6 +725,7 @@ def build_model(
         "hire": hire,
         "slacks": slacks,
         "slacks_o": slacks_o,
+        "slack_weights": slack_weights,
         "worked_hours": worked_hours,
         "doctor_cost": doctor_cost,
         "spread": spread,
@@ -732,7 +754,7 @@ def build_model(
         "pandemic_bundle": pandemic_bundle,
     }
 
-def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_limit_phase3=300):
+def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_limit_phase3=300, pandemic_mode=False):
     model = bundle["model"]
     slacks = bundle["slacks"]
     hire = bundle["hire"]
@@ -744,36 +766,46 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
     solver = cp_model.CpSolver()
     solver.parameters.num_search_workers = max(4, cores // 2)
 
+    if pandemic_mode:
+        time_limit_phase1 = max(time_limit_phase1, 180)
+        time_limit_phase2 = max(time_limit_phase2, 180)
+        time_limit_phase3 = max(time_limit_phase3, 600)
+
+        solver.parameters.linearization_level = 2 # MAYBE WOULD HELP
+
     # ========= PHASE 1 - MINIMIZE UNDERSTAFFING =========
-    # model.Minimize(sum(slacks.values()))
+
+    # total_slack_expr = cp_model.LinearExpr.Sum(list(slacks.values()))
+    #
+    # model.Minimize(total_slack_expr)
     # solver.parameters.max_time_in_seconds = time_limit_phase1
     # status1 = solver.Solve(model)
-    # best_slack = sum(solver.Value(s) for s in slacks.values())
-    # print("BEST SLACK:", best_slack, type(best_slack))
-    # print("SUM SLACK TYPE:", type(sum(slacks.values())))
-    # model.Add(sum(slacks.values()) == best_slack)
+    #
+    # best_slack = solver.Value(total_slack_expr)
+    # print(f"BEST SLACK: {best_slack}")
+    #
+    #
+    # model.Add(total_slack_expr == best_slack)
 
-    total_slack_expr = cp_model.LinearExpr.Sum(list(slacks.values()))
+    slack_weights = bundle.get("slack_weights", {s: 1 for s in slacks})
 
-    model.Minimize(total_slack_expr)
+    weighted_slack_expr = cp_model.LinearExpr.Sum([
+        slacks[s] * slack_weights[s] for s in slacks
+    ])
+
+    raw_slack_expr = cp_model.LinearExpr.Sum(list(slacks.values()))
+
+    model.Minimize(weighted_slack_expr)
     solver.parameters.max_time_in_seconds = time_limit_phase1
     status1 = solver.Solve(model)
 
-    best_slack = solver.Value(total_slack_expr)
-    print(f"BEST SLACK: {best_slack}")
+    best_weighted_slack = solver.Value(weighted_slack_expr)
+    best_raw_slack = solver.Value(raw_slack_expr)
+    print(f"BEST WEIGHTED SLACK: {best_weighted_slack}")
+    print(f"BEST RAW SLACK: {best_raw_slack} (uncovered shifts)")
 
+    model.Add(weighted_slack_expr == best_weighted_slack)
 
-    model.Add(total_slack_expr == best_slack)
-
-    # # ========= PHASE 2 - MINIMIZE EXTERNAL HIRING =========
-    # model.Minimize(sum(hire.values()))
-    # solver.parameters.max_time_in_seconds = time_limit_phase2
-    # status2 = solver.Solve(model)
-    # best_hire = sum(solver.Value(h) for h in hire.values())
-    #
-    # model.Add(sum(hire.values()) == best_hire)
-
-    # ========= PHASE 2 - MINIMIZE EXTERNAL HIRING =========
     total_hire_expr = cp_model.LinearExpr.Sum(list(hire.values()))
 
     model.Minimize(total_hire_expr)
@@ -783,7 +815,6 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
     best_hire = solver.Value(total_hire_expr)
     model.Add(total_hire_expr == best_hire)
 
-    # ========= PHASE 3 - OPTIMIZE QUALITY METRICS =========
     pref_terms = bundle["pref_terms"]
     spread = bundle["spread"]
     weekend_spread = bundle["weekend_spread"]
@@ -919,8 +950,8 @@ def solve_single_phase_comparison(bundle, *, time_limit=300):
     hard_shifts = bundle["hard_shifts"]
 
     solver = cp_model.CpSolver()
-    # solver.parameters.num_search_workers = max(4, cores // 2)
-    solver.parameters.num_search_workers = 1
+    solver.parameters.num_search_workers = max(4, cores // 2)
+    # solver.parameters.num_search_workers = 1
 
     total_understaffing = sum(slacks.values())
     total_hire = sum(hire.values())
@@ -1543,7 +1574,11 @@ def run_scenario(
     )
     print(available_per_day)
 
-    solver, status = solve_3_phase(bundle)
+    # solver, status = solve_3_phase(bundle)
+    solver, status = solve_3_phase(
+        bundle,
+        pandemic_mode=(pandemic_config is not None),
+    )
 
     results = extract_results(
         bundle, solver, status,

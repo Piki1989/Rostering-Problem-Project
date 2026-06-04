@@ -569,6 +569,19 @@ def simulate_quarantine_with_reserve(
 
     uncovered_shifts = base_result["uncovered_shifts"]
 
+    DEPT_PRIORITY = {"ICU": 0, "WARD": 1, "CLINIC": 2}
+
+    if not uncovered_shifts.empty:
+        uncovered_shifts = uncovered_shifts.copy()
+        uncovered_shifts["_priority"] = (
+            uncovered_shifts["Dept"]
+            .map(DEPT_PRIORITY)
+            .fillna(99)
+        )
+        uncovered_shifts = uncovered_shifts.sort_values(
+            ["_priority", "Date"]
+        ).drop(columns="_priority")
+
     if reserve_doctors_df is None or reserve_doctors_df.empty:
         return {
             **base_result,
@@ -635,6 +648,7 @@ def simulate_quarantine_with_reserve(
                 "Dept": shift["Dept"],
                 "Reserve doctor": res_name,
                 "Cost (PLN)": extra_cost,
+                "Manual validation required": "Yes",
             })
             assigned = True
             break
