@@ -767,9 +767,12 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
     solver.parameters.num_search_workers = max(4, cores // 2)
 
     if pandemic_mode:
-        time_limit_phase1 = max(time_limit_phase1, 180)
-        time_limit_phase2 = max(time_limit_phase2, 180)
-        time_limit_phase3 = max(time_limit_phase3, 600)
+        # time_limit_phase1 = max(time_limit_phase1, 180)
+        # time_limit_phase2 = max(time_limit_phase2, 180)
+        # time_limit_phase3 = max(time_limit_phase3, 600)
+        time_limit_phase1 = max(time_limit_phase1, 100)
+        time_limit_phase2 = max(time_limit_phase2, 100)
+        time_limit_phase3 = max(time_limit_phase3, 300)
 
         solver.parameters.linearization_level = 2 # MAYBE WOULD HELP
 

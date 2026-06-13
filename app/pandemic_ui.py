@@ -14,6 +14,9 @@ from pandemic_mode import (
     bubble_contact_matrix,
     simulate_quarantine,
     find_replacement_pandemic,
+    suggest_num_bubbles,
+    QuarantineEvent,
+    simulate_quarantine_v2,
 )
 
 # CALENDAR
@@ -109,6 +112,72 @@ def schedule_to_pandemic_calendar_events(
     return events
 
 
+def quarantine_calendar_events(quarantine_result):
+
+    events = []
+
+    affected = quarantine_result.get(
+        "affected_assignments",
+        pd.DataFrame()
+    )
+
+    for _, row in affected.iterrows():
+
+        date_str = pd.to_datetime(
+            row["Date"]
+        ).strftime("%Y-%m-%d")
+
+        events.append({
+            "title": f"❌ {row['ShiftCode']}",
+            "start": f"{date_str}T08:00:00",
+            "end": f"{date_str}T20:00:00",
+            "color": "#c0392b",
+        })
+
+    reserve_df = quarantine_result.get(
+        "reserve_assignments",
+        pd.DataFrame()
+    )
+
+    for _, row in reserve_df.iterrows():
+
+        events.append({
+            "title": f"🟠 RESERVE {row['ShiftCode']}",
+            "start": f"{row['Date']}T08:00:00",
+            "end": f"{row['Date']}T20:00:00",
+            "color": "#f39c12",
+        })
+
+    reassignment_df = quarantine_result.get(
+        "reassignments",
+        pd.DataFrame()
+    )
+
+    for _, row in reassignment_df.iterrows():
+
+        events.append({
+            "title": f"🟢 REDISTR {row['ShiftCode']}",
+            "start": f"{row['Date']}T08:00:00",
+            "end": f"{row['Date']}T20:00:00",
+            "color": "#2ecc71",
+        })
+
+    residual_df = quarantine_result.get(
+        "residual_uncovered",
+        pd.DataFrame()
+    )
+
+    for _, row in residual_df.iterrows():
+
+        events.append({
+            "title": f"⚫ UNCOVERED {row['ShiftCode']}",
+            "start": f"{row['Date']}T08:00:00",
+            "end": f"{row['Date']}T20:00:00",
+            "color": "#2d3436",
+        })
+
+    return events
+
 # MAIN RENDER
 
 def render_pandemic_tab(
@@ -142,6 +211,81 @@ def render_pandemic_tab(
 
     num_bubbles = config.num_bubbles
     contact_depts = config.contact_depts
+
+    # =====================================================================
+    # ADAPTIVE BUBBLE SIZING
+    # =====================================================================
+    st.subheader("Adaptive Bubble Sizing")
+
+    clinic_pool_count = sum(
+        1 for b in bubble_assignment.values()
+        if b == -1
+    )
+
+    bubble_doctors_count = len(doctors) - clinic_pool_count
+
+    suggestion = suggest_num_bubbles(
+        n_doctors=bubble_doctors_count,
+        target_loss_pct=config.target_loss_pct,
+        min_bubble_size=config.min_bubble_size,
+        max_bubbles=10,
+        min_bubbles=2,
+    )
+
+    col_s1, col_s2, col_s3 = st.columns(3)
+
+    col_s1.metric(
+        "Current bubbles",
+        config.num_bubbles
+    )
+
+    col_s2.metric(
+        "Recommended bubbles",
+        suggestion["recommended"]
+    )
+
+    col_s3.metric(
+        "Expected loss per quarantined bubble",
+        f"{suggestion['loss_pct']}%"
+    )
+
+    if suggestion["recommended"] == config.num_bubbles:
+        st.success(
+            "The current number of bubbles matches the adaptive recommendation."
+        )
+    else:
+        st.warning(
+            f"The adaptive recommendation is {suggestion['recommended']} bubbles, "
+            f"but the current schedule uses {config.num_bubbles}. "
+            "Consider adjusting the number of bubbles before optimization."
+        )
+
+    if suggestion.get("warning"):
+        st.info(suggestion["warning"])
+
+    with st.expander("How is the recommended bubble count calculated?"):
+        st.markdown(f"""
+        The recommendation balances two goals:
+
+        1. **Limit the workforce loss if one bubble is quarantined.**  
+           The target loss is currently set to **{config.target_loss_pct * 100:.0f}%**.
+
+        2. **Keep bubbles large enough to remain operational.**  
+           The minimum bubble size is currently set to **{config.min_bubble_size} doctors**.
+
+        Internally, the function computes:
+
+        - minimum bubbles needed by risk limit: `ceil(1 / target_loss_pct)`
+        - maximum feasible bubbles by size: `number_of_doctors // min_bubble_size`
+        - final recommendation: the smaller of those two values, capped by `max_bubbles`
+
+        In this schedule:
+
+        - doctors considered for bubbles: **{bubble_doctors_count}**
+        - doctors in CLINIC pool: **{clinic_pool_count}**
+        - recommended bubbles: **{suggestion["recommended"]}**
+        - expected loss if one bubble is quarantined: **{suggestion["loss_pct"]}%**
+        """)
 
     # =====================================================================
     # BUBBLE ASSIGNMENT
@@ -217,8 +361,20 @@ def render_pandemic_tab(
     with st.expander("Show full bubble assignment", expanded=False):
 
         def highlight_bubble(row):
-            colors = ["#dbeafe", "#dcfce7", "#fef9c3", "#fce7f3", "#ede9fe"]
-            color = colors[int(row["Bubble"]) % len(colors)]
+
+            colors = [
+                "#dbeafe",
+                "#dcfce7",
+                "#fef9c3",
+                "#fce7f3",
+                "#ede9fe",
+            ]
+
+            try:
+                color = colors[int(row["Bubble"]) % len(colors)]
+            except (ValueError, TypeError):
+                color = "#f3f4f6"
+
             return [f"background-color: {color}"] * len(row)
 
         st.dataframe(
@@ -288,6 +444,50 @@ def render_pandemic_tab(
             "Emergency cross-bubble violations",
             len(violations)
         )
+
+    # =====================================================================
+    # CLINIC POOL
+    # =====================================================================
+
+    clinic_pool_ids = [
+        d for d, b in bubble_assignment.items()
+        if b == -1
+    ]
+
+    if clinic_pool_ids:
+        st.subheader("Doctors Outside Bubble System (CLINIC Pool)")
+
+        clinic_pool_df = pd.DataFrame({
+            "Doctor": [
+                id_to_name.get(d, f"Doctor {d}")
+                for d in clinic_pool_ids
+            ],
+            "Role": [
+                id_to_role.get(d, "")
+                for d in clinic_pool_ids
+            ]
+        })
+
+        st.info(
+            f"{len(clinic_pool_ids)} doctor(s) work exclusively in outpatient clinics "
+            "and are not assigned to pandemic bubbles."
+        )
+
+        st.dataframe(
+            clinic_pool_df,
+            width="stretch",
+            hide_index=True,
+        )
+
+        with st.expander("Why are these doctors excluded from bubbles?"):
+            st.markdown("""
+            Clinic-only physicians do not participate in WARD/ICU contact shifts.
+
+            Therefore:
+            - they are not included in bubble isolation,
+            - they do not generate cross-bubble contacts,
+            - quarantine is handled individually.
+            """)
 
     # =====================================================================
     # CALENDAR
@@ -396,25 +596,140 @@ def render_pandemic_tab(
     st.subheader("Quarantine Simulation")
 
     st.markdown(
-        "Simulate what happens if one bubble is quarantined due to exposure. "
-        "This analysis uses the **current schedule** and removes the quarantined bubble."
+        "Simulate what happens when a bubble, a single doctor, or selected doctors "
+        "are quarantined for a chosen period. The analysis uses the current schedule "
+        "and re-optimizes coverage within the quarantine window."
     )
 
-    quarantine_bubble = st.selectbox(
-        "Select bubble to quarantine",
-        options=list(range(num_bubbles)),
-        format_func=lambda b: f"Bubble {b} ({sum(1 for bb in bubble_assignment.values() if bb == b)} doctors)"
+    quarantine_type = st.radio(
+        "Quarantine target",
+        [
+            "Bubble",
+            "Single doctor",
+            "Multiple doctors",
+        ],
+        horizontal=True,
     )
 
-    from pandemic_mode import simulate_quarantine_with_reserve
+    start_date = st.date_input(
+        "Quarantine start date",
+        value=pd.to_datetime(
+            results["schedule_df"]["Date"]
+        ).min()
+    )
 
-    quarantine_result = simulate_quarantine_with_reserve(
-        results=results,
-        quarantine_bubble=quarantine_bubble,
-        bubble_assignment=bubble_assignment,
-        id_to_name=id_to_name,
-        config=config,
-        reserve_doctors_df=reserve_doctors_df,
+    duration_days = st.slider(
+        "Duration (days)",
+        min_value=1,
+        max_value=30,
+        value=7,
+    )
+
+    doctor_names = sorted(
+        list(id_to_name.values())
+    )
+
+    event = None
+    quarantine_bubble = None
+
+    if quarantine_type == "Bubble":
+        quarantine_bubble = st.selectbox(
+            "Select bubble",
+            options=list(range(num_bubbles)),
+            format_func=lambda b:
+            f"Bubble {b} ({sum(1 for bb in bubble_assignment.values() if bb == b)} doctors)"
+        )
+
+        event = QuarantineEvent(
+            target_type="bubble",
+            target=quarantine_bubble,
+            start_date=start_date.strftime("%Y-%m-%d"),
+            duration_days=duration_days,
+        )
+
+    elif quarantine_type == "Single doctor":
+
+        selected_doctor = st.selectbox(
+            "Doctor",
+            doctor_names,
+        )
+
+        event = QuarantineEvent(
+            target_type="doctor",
+            target=selected_doctor,
+            start_date=start_date.strftime("%Y-%m-%d"),
+            duration_days=duration_days,
+        )
+
+    else:
+
+        selected_doctors = st.multiselect(
+            "Doctors",
+            doctor_names,
+        )
+
+        if selected_doctors:
+            event = QuarantineEvent(
+                target_type="doctors",
+                target=selected_doctors,
+                start_date=start_date.strftime("%Y-%m-%d"),
+                duration_days=duration_days,
+            )
+
+    if event is not None:
+
+        quarantine_result = simulate_quarantine_v2(
+            results=results,
+            events=[event],
+            bubble_assignment=bubble_assignment,
+            id_to_name=id_to_name,
+            config=config,
+            reserve_doctors_df=reserve_doctors_df,
+        )
+
+    else:
+        st.info("Select at least one doctor.")
+        return
+
+    # Mini CP-SAT solver diagnostics
+    st.subheader("Mini CP-SAT Solver")
+
+    col_solver1, col_solver2, col_solver3 = st.columns(3)
+
+    col_solver1.metric(
+        "Status",
+        quarantine_result.get("status", "UNKNOWN")
+    )
+
+    col_solver2.metric(
+        "Solve time",
+        f"{quarantine_result.get('solve_time', 0.0):.2f}s"
+    )
+
+    objective_value = quarantine_result.get("objective")
+    col_solver3.metric(
+        "Objective",
+        "—" if objective_value is None else f"{objective_value:.0f}"
+    )
+
+    with st.expander("Quarantined doctors"):
+
+        for date_str, doctors_list in quarantine_result[
+            "quarantined_doctors_by_date"
+        ].items():
+            st.write(
+                f"**{date_str}**: "
+                + ", ".join(doctors_list)
+            )
+
+
+    severity = quarantine_result["severity"]
+
+    col_sev1, col_sev2 = st.columns([1, 3])
+
+    col_sev1.metric(
+        "Pandemic Risk",
+        severity
     )
 
     severity_color = {
@@ -426,8 +741,21 @@ def render_pandemic_tab(
     getattr(st, severity_color)(quarantine_result["recommendation"])
 
     col_q1, col_q2, col_q3, col_q4 = st.columns(4)
-    col_q1.metric("Doctors quarantined", len(quarantine_result["quarantined_doctors"]))
-    col_q2.metric("Shifts lost", len(quarantine_result["uncovered_shifts"]))
+    all_quarantined = set()
+
+    for doctors_list in quarantine_result[
+        "quarantined_doctors_by_date"
+    ].values():
+        all_quarantined.update(doctors_list)
+
+    col_q1.metric(
+        "Doctors quarantined",
+        len(all_quarantined)
+    )
+    col_q2.metric(
+        "Shifts lost",
+        len(quarantine_result["affected_assignments"])
+    )
     col_q3.metric("Coverage impact", f"{quarantine_result['coverage_impact_pct']}%")
     col_q4.metric("Days affected", quarantine_result["days_affected"])
 
@@ -448,14 +776,45 @@ def render_pandemic_tab(
         )
         st.altair_chart(dept_chart, use_container_width=True)
 
-    with st.expander(f"Quarantined doctors (Bubble {quarantine_bubble})"):
-        st.write(", ".join(quarantine_result["quarantined_doctors"]))
+    with st.expander("Affected assignments"):
 
-    with st.expander("Uncovered shifts after quarantine"):
-        if quarantine_result["uncovered_shifts"].empty:
-            st.info("No shifts become uncovered.")
+        if quarantine_result["affected_assignments"].empty:
+            st.info("No assignments affected.")
         else:
-            st.dataframe(quarantine_result["uncovered_shifts"], width="stretch")
+            st.dataframe(
+                quarantine_result["affected_assignments"],
+                width="stretch"
+            )
+
+
+    st.subheader("Quarantine Scenario Calendar")
+
+    scenario_events = quarantine_calendar_events(
+        quarantine_result
+    )
+
+    calendar(
+        events=scenario_events,
+        options={
+            "initialView": "dayGridMonth",
+            "height": 600,
+        },
+        key="quarantine_scenario_calendar",
+    )
+
+    legend_cols = st.columns(4)
+
+    with legend_cols[0]:
+        st.markdown("🔴 Quarantined shifts")
+
+    with legend_cols[1]:
+        st.markdown("🟠 Reserve coverage")
+
+    with legend_cols[2]:
+        st.markdown("🟢 Internal redistribution")
+
+    with legend_cols[3]:
+        st.markdown("⚫ Still uncovered")
 
     # =====================================================================
     # RESERVE ACTIVATION
@@ -468,21 +827,29 @@ def render_pandemic_tab(
         "(e.g., 11-hour rest periods, weekly workload limits)."
     )
 
-    if not quarantine_result.get("reserve_available"):
+    reserve_available = reserve_doctors_df is not None and not reserve_doctors_df.empty
+
+    if not reserve_available:
         st.warning("No reserve physician pool available — reserve activation impossible.")
     else:
-        col_r1, col_r2, col_r3 = st.columns(3)
+        col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+
         col_r1.metric(
             "Covered by reserve",
-            quarantine_result["covered_by_reserve"],
-            delta=f"-{quarantine_result['covered_by_reserve']} from gap",
-            delta_color="inverse"
+            quarantine_result.get("covered_by_reserve", 0),
         )
+
         col_r2.metric(
-            "Residual uncovered",
-            quarantine_result["residual_gap"],
+            "Internal redistribution",
+            quarantine_result.get("reassigned_count", 0),
         )
+
         col_r3.metric(
+            "Residual uncovered",
+            quarantine_result.get("residual_gap", 0),
+        )
+
+        col_r4.metric(
             "Reserve cost",
             f"{quarantine_result.get('reserve_total_cost', 0):,} PLN"
         )
@@ -511,6 +878,15 @@ def render_pandemic_tab(
             with st.expander(f"Reserve assignments ({quarantine_result['covered_by_reserve']} shifts)"):
                 st.dataframe(
                     quarantine_result["reserve_assignments"],
+                    width="stretch"
+                )
+
+        if not quarantine_result.get("reassignments", pd.DataFrame()).empty:
+            with st.expander(
+                    f"Internal reassignments ({quarantine_result.get('reassigned_count', 0)} shifts)"
+            ):
+                st.dataframe(
+                    quarantine_result["reassignments"],
                     width="stretch"
                 )
 
