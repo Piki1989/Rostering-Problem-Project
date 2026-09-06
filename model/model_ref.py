@@ -4,8 +4,8 @@ import pandas as pd
 import datetime
 import multiprocessing
 from datetime import datetime as dt
-from compute_global_metrics import compute_hospital_efficiency_v2
-from pandemic_mode import (
+from app.compute_global_metrics import compute_hospital_efficiency_v2
+from app.pandemic_mode import (
     PandemicConfig,
     prepare_pandemic_bubbles,
     validate_bubbles,
@@ -191,6 +191,11 @@ def build_model(
             max_hours[cid] = cand["max_hours"] if "max_hours" in cand else 48
 
     specialists = doctors[doctors["role"].isin(["specialist", "icu_specialist"])]["id"]
+    outpatients = set(
+        doctors[
+            doctors["role"] == "outpatient"
+            ]["id"]
+    )
 
     needs_mentor = (
             list(doctors[doctors["needs_mentor"] == 1]["id"]) +
@@ -583,13 +588,20 @@ def build_model(
     """2. Fairness objectives: balanced distribution of demanding shifts."""
     """2.a Night shift fairness."""
 
+    # night_count = {}
+    # for d, allowed in night_allowed.items():
+    #     if id_to_role[d] in ["specialist", "icu_specialist"]:
+    #         if allowed == 1:
+    #             count = model.NewIntVar(0, 100, f"night_count_{d}")
+    #             model.Add(count == sum(x[(d, s)] for s in night_shifts))
+    #             night_count[d] = count
     night_count = {}
-    for d, allowed in night_allowed.items():
-        if id_to_role[d] in ["specialist", "icu_specialist"]:
-            if allowed == 1:
-                count = model.NewIntVar(0, 100, f"night_count_{d}")
-                model.Add(count == sum(x[(d, s)] for s in night_shifts))
-                night_count[d] = count
+
+    for d in D:
+        if id_to_role[d] in ["specialist", "icu_specialist"] and night_allowed[d] == 1:
+            count = model.NewIntVar(0, 100, f"night_count_{d}")
+            model.Add(count == sum(x[(d, s)] for s in night_shifts))
+            night_count[d] = count
 
     max_nights = model.NewIntVar(0, 100, "max_nights")
     min_nights = model.NewIntVar(0, 100, "min_nights")
@@ -678,13 +690,14 @@ def build_model(
     for d in D_all:
         role = id_to_role[d]
         is_regular = d in regular_doctors
+        is_outpatient = d in outpatients
         mh = max_hours[d]
 
         for w in weeks:
             limit = weekly_limits[d][w]
             days_present = weekly_available_days[d][w]
 
-            if is_regular:
+            if is_regular or is_outpatient:
                 target = int(0.95 * limit)
             else:
                 base_48 = 48 * days_present / 7
@@ -703,7 +716,7 @@ def build_model(
         for w in weeks:
             limit = weekly_limits[d][w]
             days_present = weekly_available_days[d][w]
-            if d in regular_doctors:
+            if d in regular_doctors or d in outpatients:
                 target = int(0.95 * limit)
             else:
                 base_48 = 48 * days_present / 7
@@ -754,7 +767,7 @@ def build_model(
         "pandemic_bundle": pandemic_bundle,
     }
 
-def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_limit_phase3=300, pandemic_mode=False):
+def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_limit_phase3=300, pandemic_mode=False, ref_override=None):
     model = bundle["model"]
     slacks = bundle["slacks"]
     hire = bundle["hire"]
@@ -852,6 +865,9 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
         "pref": -300,
     }
 
+    if ref_override:
+        REF.update(ref_override)
+
     B = REF["cost"]
 
     SCALE = 1_000_000
@@ -944,7 +960,14 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
 
     return solver, status3
 
-def solve_single_phase_comparison(bundle, *, time_limit=300):
+def solve_single_phase_comparison(
+        bundle,
+        *,
+        time_limit=300,
+        w_understaff=1_000_000,
+        w_hire=10_000,
+        ref_override=None,
+):
     model = bundle["model"]
     slacks = bundle["slacks"]
     hire = bundle["hire"]
@@ -992,6 +1015,9 @@ def solve_single_phase_comparison(bundle, *, time_limit=300):
         "weekly_underwork": 0,
         "pref": -200,
     }
+
+    if ref_override:
+        REF.update(ref_override)
 
     B = REF["cost"]
 
@@ -1056,7 +1082,11 @@ def solve_single_phase_comparison(bundle, *, time_limit=300):
     coeff = SCALE // max_pref
     model.Add(Z >= (total_pref - REF["pref"]) * coeff)
 
-    final_objective = (total_understaffing * 1000000) + (total_hire * 10000) + Z
+    final_objective = (
+            total_understaffing * w_understaff
+            + total_hire * w_hire
+            + Z
+    )
     model.Minimize(final_objective)
 
     solver = cp_model.CpSolver()
@@ -1433,9 +1463,16 @@ def extract_results(bundle, solver, status, doctors, candidates, shifts, pref, c
     opt_out_doctors = set(
         doctors[doctors["opt_out"] == 1]["id"]
     )
-    avg_satisfaction = round(stats_df["S_pct"].mean(), 2)
-    min_satisfaction = round(stats_df["S_pct"].min(), 2)
-    max_satisfaction = round(stats_df["S_pct"].max(), 2)
+    # avg_satisfaction = round(stats_df["S_pct"].mean(), 2)
+    # min_satisfaction = round(stats_df["S_pct"].min(), 2)
+    # max_satisfaction = round(stats_df["S_pct"].max(), 2)
+    stats_eval_df = stats_df[
+        (~stats_df["IsCandidate"]) | (stats_df["Hired"])
+        ].copy()
+
+    avg_satisfaction = round(stats_eval_df["S_pct"].mean(), 2)
+    min_satisfaction = round(stats_eval_df["S_pct"].min(), 2)
+    max_satisfaction = round(stats_eval_df["S_pct"].max(), 2)
 
     return {
 
@@ -1507,6 +1544,7 @@ def run_scenario(
     pandemic_config=None,
     bubble_assignment=None,
     validation_result=None,
+    ref_override=None
 ):
     print("\n=== DEBUG IDS ===")
 
@@ -1581,6 +1619,7 @@ def run_scenario(
     solver, status = solve_3_phase(
         bundle,
         pandemic_mode=(pandemic_config is not None),
+        ref_override=ref_override
     )
 
     results = extract_results(
@@ -1673,11 +1712,24 @@ def run_model_and_get_results(
     else:
         doctors = doctors_df.copy()
 
-    # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec2026.csv")
-    shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec2026_pandemic.csv")
+    shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec2026.csv")
+
+    # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec2026_pandemic.csv")
     unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_dec_2026.csv")
     unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_sh_dec_2026.csv")
-    pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_dec.csv")
+    # pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_dec.csv")
+    pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_A.csv")
+
+    # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec_B.csv")
+    # unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_B.csv")
+    # unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_sh_B.csv")
+    # pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_B.csv")
+
+    # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_dec_C.csv")
+    # unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavail_C.csv")
+    # unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "unavail_sh_C.csv")
+    # pref = pd.read_csv(DATA_DIR / "pref_monthly" / "pref_C.csv")
+
     # shifts = pd.read_csv(DATA_DIR / "shifts_month" / "shifts_mar2026.csv")
     # unavail_day = pd.read_csv(DATA_DIR / "unavail_monthly_day" / "unavailability_mar2026.csv")
     # unavail_shift = pd.read_csv(DATA_DIR / "unavail_monthly_shift" / "shift_unavailability_mar2026.csv")
@@ -1703,6 +1755,7 @@ def run_model_and_get_results(
 
     pandemic_config = None
     bubble_assignment = None
+    validation_result = None
 
     if pandemic_mode:
         pandemic_config = PandemicConfig(
@@ -1781,7 +1834,7 @@ def run_model_and_get_results(
 
 if __name__ == "__main__":
     results = run_model_and_get_results(
-        pandemic_mode=True
+        pandemic_mode=False
     )
 
     print("\n================ BASELINE (NO HIRE) ================\n")

@@ -703,7 +703,7 @@ Comparison of two scenarios:
 @st.cache_resource(show_spinner=False)
 def run_model():
     return run_model_and_get_results(
-        pandemic_mode=True
+        pandemic_mode=False
     )
 
 with st.spinner("Running optimization model (this may take a few minutes)..."):
@@ -1103,7 +1103,8 @@ if not export_flag_file.exists():
     with open(run_export_dir / "run_summary.txt", "w") as f:
         f.write(f"Run: {current_run}\n")
         f.write(f"Total cost: {baseline['total_cost']}\n")
-        f.write(f"Avg satisfaction: {baseline['stats_df']['S_pct'].mean():.2f}\n")
+        # f.write(f"Avg satisfaction: {baseline['stats_df']['S_pct'].mean():.2f}\n")
+        f.write(f"Avg satisfaction: {baseline['avg_satisfaction']:.2f}\n")
         f.write(f"Efficiency: {baseline_eff['HospitalEfficiencyScore']}\n")
 
     export_flag_file.write_text("export completed")
