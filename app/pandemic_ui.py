@@ -323,7 +323,7 @@ def render_pandemic_tab(
                     return "background-color: #f8d7da; color: #721c24"
                 return ""
 
-            styled = validation_df.style.applymap(
+            styled = validation_df.style.map(
                 color_status, subset=["Status"]
             )
             st.dataframe(styled, width="stretch")

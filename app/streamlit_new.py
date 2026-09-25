@@ -8,7 +8,6 @@ import altair as alt
 from compute_global_metrics import *
 from pareto_utils import *
 import plotly.express as px
-from altair_saver import save
 import altair as alt
 
 
@@ -1089,7 +1088,7 @@ if not df3_current.empty:
 
 st.plotly_chart(fig3d, use_container_width=True)
 
-if not export_flag_file.exists():
+if not pareto_df.empty and not export_flag_file.exists():
 
     # save(cost_sat_chart, run_export_dir / "fig1_cost_vs_satisfaction.svg")
     # save(frontier_ce_chart, run_export_dir / "fig2_cost_vs_efficiency.svg")
@@ -1103,7 +1102,7 @@ if not export_flag_file.exists():
     with open(run_export_dir / "run_summary.txt", "w") as f:
         f.write(f"Run: {current_run}\n")
         f.write(f"Total cost: {baseline['total_cost']}\n")
-        f.write(f"Avg satisfaction: {baseline['stats_df']['S_pct'].mean():.2f}\n")
+        f.write(f"Avg satisfaction: {baseline['avg_satisfaction']:.2f}\n")
         f.write(f"Efficiency: {baseline_eff['HospitalEfficiencyScore']}\n")
 
     export_flag_file.write_text("export completed")

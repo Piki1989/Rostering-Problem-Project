@@ -1433,9 +1433,10 @@ def extract_results(bundle, solver, status, doctors, candidates, shifts, pref, c
     opt_out_doctors = set(
         doctors[doctors["opt_out"] == 1]["id"]
     )
-    avg_satisfaction = round(stats_df["S_pct"].mean(), 2)
-    min_satisfaction = round(stats_df["S_pct"].min(), 2)
-    max_satisfaction = round(stats_df["S_pct"].max(), 2)
+    stats_eval_df = stats_df[(~stats_df["IsCandidate"]) | (stats_df["Hired"])]
+    avg_satisfaction = round(stats_eval_df["S_pct"].mean(), 2)
+    min_satisfaction = round(stats_eval_df["S_pct"].min(), 2)
+    max_satisfaction = round(stats_eval_df["S_pct"].max(), 2)
 
     return {
 
@@ -1703,6 +1704,7 @@ def run_model_and_get_results(
 
     pandemic_config = None
     bubble_assignment = None
+    validation_result = None
 
     if pandemic_mode:
         pandemic_config = PandemicConfig(
