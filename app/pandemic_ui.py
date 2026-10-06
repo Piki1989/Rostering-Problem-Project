@@ -947,12 +947,15 @@ def render_pandemic_tab(
     st.subheader("Emergency Replacement (Pandemic Mode)")
 
     st.markdown(
-        "In pandemic mode, replacements are restricted to **same-bubble doctors**. "
+        "On WARD/ICU shifts the replacement must be in the **same bubble as the doctors "
+        "remaining on that shift**. If nobody else is on the shift, other bubbles are allowed "
+        "but ranked last. Doctors quarantined in the simulation above are excluded. "
         "New hires (candidates) are disabled. Reserve staff can be used with confirmation."
     )
 
     st.caption(
-        "Replacement search is restricted to the same bubble whenever possible."
+        "All labour-law checks (11h rest, weekly limit, nights, working days, "
+        "unavailability, mentor) are the same as in the standard replacement search."
     )
 
     assigned_shifts = results["schedule_df"].dropna(subset=["Doctor"])
@@ -993,6 +996,7 @@ def render_pandemic_tab(
         id_to_name=id_to_name,
         config=config,
         reserve_doctors_df=reserve_doctors_df,
+        quarantined_by_date=quarantine_result["quarantined_doctors_by_date"],
     )
 
     if rep_result["fallback_message"]:
@@ -1033,7 +1037,7 @@ def render_pandemic_tab(
             if r["source"] == "reserve":
                 return "Reserve"
             if r["rest_ok"] and r["skill_ok"]:
-                return "OK – same bubble"
+                return "OK – other bubble" if r.get("other_bubble") else "OK – same bubble"
             return "Violation"
 
         candidates_df_rep["status"] = candidates_df_rep.apply(get_status, axis=1)
@@ -1053,8 +1057,8 @@ def render_pandemic_tab(
                 color=alt.Color(
                     "status:N",
                     scale=alt.Scale(
-                        domain=["OK – same bubble", "Reserve", "Violation"],
-                        range=["#2ecc71", "#f39c12", "#e74c3c"]
+                        domain=["OK – same bubble", "OK – other bubble", "Reserve", "Violation"],
+                        range=["#2ecc71", "#3498db", "#f39c12", "#e74c3c"]
                     )
                 ),
                 tooltip=["name", "source", "bubble", "score", "extra_cost"]

@@ -11,7 +11,6 @@ from pandemic_mode import (
     validate_bubbles,
     add_pandemic_constraints,
     get_pandemic_results,
-    assign_hired_candidates_to_bubbles
 )
 
 cores = multiprocessing.cpu_count()
@@ -754,7 +753,7 @@ def build_model(
         "pandemic_bundle": pandemic_bundle,
     }
 
-def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_limit_phase3=300, pandemic_mode=False):
+def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_limit_phase3=300, pandemic_mode=False, time_limit_isolation=60):
     model = bundle["model"]
     slacks = bundle["slacks"]
     hire = bundle["hire"]
@@ -808,6 +807,17 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
     print(f"BEST RAW SLACK: {best_raw_slack} (uncovered shifts)")
 
     model.Add(weighted_slack_expr == best_weighted_slack)
+
+    # PHASE 1b - pandemic: minimise cross-bubble contacts before hiring
+    pb = bundle.get("pandemic_bundle")
+    if pb is not None and pb["crossbubble_violations"]:
+        violations_expr = cp_model.LinearExpr.Sum(pb["crossbubble_violations"])
+        model.Minimize(violations_expr)
+        solver.parameters.max_time_in_seconds = time_limit_isolation
+        solver.Solve(model)
+        best_violations = solver.Value(violations_expr)
+        print(f"BEST CROSS-BUBBLE VIOLATIONS: {best_violations}")
+        model.Add(violations_expr == best_violations)
 
     total_hire_expr = cp_model.LinearExpr.Sum(list(hire.values()))
 
@@ -921,23 +931,7 @@ def solve_3_phase(bundle, *, time_limit_phase1=100, time_limit_phase2=100, time_
     coeff = SCALE // max_pref
     model.Add(Z >= (total_pref - REF["pref"]) * coeff)
 
-    pandemic_penalty_expr = 0
-
-    if "pandemic_bundle" in bundle:
-
-        pb = bundle["pandemic_bundle"]
-
-        if pb is not None:
-            pandemic_penalty_expr = (
-                    pb["penalty"]
-                    * cp_model.LinearExpr.Sum(
-                pb["crossbubble_violations"]
-            )
-            )
-
-    model.Minimize(
-        Z + pandemic_penalty_expr
-    )
+    model.Minimize(Z)
 
     solver.parameters.max_time_in_seconds = time_limit_phase3
     status3 = solver.Solve(model)
@@ -1599,18 +1593,16 @@ def run_scenario(
     results["weekly_limits"] = bundle["weekly_limits"]
 
     if pandemic_config is not None and bubble_assignment is not None:
-        hired_candidate_ids = [
+        hired_candidate_ids = {
             c for c, hired in results["raw_hire"].items()
             if hired == 1
-        ]
+        }
+        candidate_ids = set(candidates["id"])
 
-        final_bubble_assignment = assign_hired_candidates_to_bubbles(
-            hired_candidate_ids=hired_candidate_ids,
-            bubble_assignment=bubble_assignment,
-            doctors=doctors,
-            candidates=candidates,
-            config=pandemic_config,
-        )
+        final_bubble_assignment = {
+            d: b for d, b in bubble_assignment.items()
+            if d not in candidate_ids or d in hired_candidate_ids
+        }
 
         results["pandemic"] = {
             "config": pandemic_config,
