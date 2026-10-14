@@ -37,6 +37,9 @@ uv run python -m rostering --help
   - App: environment variable `ROSTERING_DATASET`.
 - **Pandemic mode**: `--pandemic` on the command line. In the app it is on by default; set `ROSTERING_PANDEMIC=0` to turn it off.
 - **Solver**: `SolverConfig` in `rostering/config.py` sets the phase time limits, the number of workers, the warm start between phases (`use_hints`) and the random seed.
+  - Command line: `--time-limits P1 P2 P3`, `--workers`, `--hints`, `--seed`.
+  - App: `ROSTERING_TIME_LIMITS="P1,P2,P3"`.
+  - On `dec2026_pandemic`, phase 3 found its final solution within 12-45 s; the rest of the default 300 s limit brought no improvement. `--time-limits 100 100 60` is about 5× faster on this data.
 - **Phase 3 targets**: `ObjectiveTargets` holds the budget, the spread targets and the preference target.
 
 ## Layout

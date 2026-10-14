@@ -98,7 +98,7 @@ class SolverConfig:
     time_limit_phase2: float = 100      # number of hires
     time_limit_phase3: float = 300      # Chebyshev compromise
     num_workers: int | None = None      # None -> max(4, cpu_count // 2) as in the original code
-    use_hints: bool = True              # warm start every phase from the previous phase's solution
+    use_hints: bool = False             # warm start every phase from the previous phase's solution
     feasibility_probe: bool = False     # the original 30 s "FEASIBILITY CHECK" solve before phase 1
     random_seed: int | None = None      # fix for reproducible runs (together with num_workers=1)
     log_search_progress: bool = False
@@ -139,7 +139,7 @@ class RunConfig:
             dataset=os.environ.get("ROSTERING_DATASET", DEFAULT_DATASET),
             pandemic_mode=os.environ.get("ROSTERING_PANDEMIC", "1") == "1",
         )
-        cfg.solver.use_hints = os.environ.get("ROSTERING_HINTS", "1") == "1"
+        cfg.solver.use_hints = os.environ.get("ROSTERING_HINTS", "0") == "1"
         if os.environ.get("ROSTERING_TIME_LIMITS"):
             p1, p2, p3 = (float(v) for v in os.environ["ROSTERING_TIME_LIMITS"].split(","))
             cfg.solver.time_limit_phase1, cfg.solver.time_limit_phase2, cfg.solver.time_limit_phase3 = p1, p2, p3

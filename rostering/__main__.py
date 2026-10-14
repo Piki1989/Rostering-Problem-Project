@@ -14,7 +14,7 @@ def main() -> None:
     parser.add_argument("--pandemic", action="store_true", help="pandemic mode (bubbles, no 24 h shifts)")
     parser.add_argument("--workers", type=int, help="CP-SAT search workers (default max(4, cpus // 2))")
     parser.add_argument("--seed", type=int, help="random seed (use with --workers 1 for reproducible runs)")
-    parser.add_argument("--no-hints", action="store_true", help="do not warm start phases from the previous one")
+    parser.add_argument("--hints", action="store_true", help="warm start every phase from the previous one")
     parser.add_argument("--time-limits", type=float, nargs=3, metavar=("P1", "P2", "P3"),
                         help="time limits of the phases in seconds (default 100 100 300)")
     parser.add_argument("--no-save", action="store_true", help="do not write results/<dataset>/")
@@ -28,7 +28,7 @@ def main() -> None:
     config = RunConfig(dataset=args.dataset, pandemic_mode=args.pandemic, save=not args.no_save)
     config.solver.num_workers = args.workers
     config.solver.random_seed = args.seed
-    config.solver.use_hints = not args.no_hints
+    config.solver.use_hints = args.hints
     config.solver.log_search_progress = args.verbose
     if args.time_limits:
         config.solver.time_limit_phase1, config.solver.time_limit_phase2, config.solver.time_limit_phase3 = args.time_limits
