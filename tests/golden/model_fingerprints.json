@@ -1,0 +1,1004 @@
+{
+ "dec2026-normal-hire": {
+  "bubbles": null,
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 20078
+   },
+   "has_objective": false,
+   "num_constraints": 20090,
+   "num_variables": 6709,
+   "raw_sha256": "6a94890e57df7209e413dff6b111c3c95b39c8d0e89ee8cd2830bfb8f23a43c9",
+   "sha256": "87d7f5e7ac5461b803c2907c6002689bbe2bbe9a9786c960c7610615c50d60ea"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 20090
+   },
+   "has_objective": true,
+   "num_constraints": 20102,
+   "num_variables": 6711,
+   "raw_sha256": "bd5f791b0a164df3b5f01224b31241a07271791ad47f8182cfe3b4f9aae8252e",
+   "sha256": "563b37a865bc4e3e7dce5a16098e7b3ae79cc6b5e0c90c59844b66d58eda6ae4"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20078
+    },
+    "has_objective": true,
+    "num_constraints": 20090,
+    "num_variables": 6709,
+    "raw_sha256": "f0810d48feefc3215be2b26cfb09a838443546150eddc9a99fcb1bf8552d3783",
+    "sha256": "cf665f2d89dbcfafde852a47fd8ec625eb700cfa7330fe51af32c6b6e93e9ff1"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20079
+    },
+    "has_objective": true,
+    "num_constraints": 20091,
+    "num_variables": 6709,
+    "raw_sha256": "c0958b3005cddc36f94d8792756d384eaae8f9a5fc43483344d82143b37cd90a",
+    "sha256": "07245af6327ab2c749f863df41f3a10d3e79c8c4b398836871afe3031c8cd487"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20090
+    },
+    "has_objective": true,
+    "num_constraints": 20102,
+    "num_variables": 6711,
+    "raw_sha256": "bd5f791b0a164df3b5f01224b31241a07271791ad47f8182cfe3b4f9aae8252e",
+    "sha256": "563b37a865bc4e3e7dce5a16098e7b3ae79cc6b5e0c90c59844b66d58eda6ae4"
+   }
+  ]
+ },
+ "dec2026-normal-nohire": {
+  "bubbles": null,
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 20082
+   },
+   "has_objective": false,
+   "num_constraints": 20094,
+   "num_variables": 6709,
+   "raw_sha256": "f2b5da9753447958a3359d1d94e6b4e62addc1d7d2a66c5ba40ded921475e48a",
+   "sha256": "e726add89148a11d7aae1994363f13c782f6ea4fcf83d1075da7cc30fc12ca13"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 20094
+   },
+   "has_objective": true,
+   "num_constraints": 20106,
+   "num_variables": 6711,
+   "raw_sha256": "18ce3b0b8828de73b34566f75a98914c938d4aafd1770cddf093ce4e44dc261a",
+   "sha256": "5a0c270d9139feda2b9c13bcea961b4861b05ddaacaa7496dbeb2b9eb432a378"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20082
+    },
+    "has_objective": true,
+    "num_constraints": 20094,
+    "num_variables": 6709,
+    "raw_sha256": "adcf064a94ca12e311f564fec2c118afb368aa15ad1af173b1446f5dfdf1a8c9",
+    "sha256": "15bb0ffc17908bcc20d8b16e656f7f6507d9624b684b57ee5c8f77e80519363e"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20083
+    },
+    "has_objective": true,
+    "num_constraints": 20095,
+    "num_variables": 6709,
+    "raw_sha256": "f1aaa9c00521db70236e79066a7ccfa9d9ec714889102b994fdc6029190fb13b",
+    "sha256": "8158f487d359e7db38a0b60f5a9559e3221fbf7602f2c200f7fc067cd98de7bd"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20094
+    },
+    "has_objective": true,
+    "num_constraints": 20106,
+    "num_variables": 6711,
+    "raw_sha256": "18ce3b0b8828de73b34566f75a98914c938d4aafd1770cddf093ce4e44dc261a",
+    "sha256": "5a0c270d9139feda2b9c13bcea961b4861b05ddaacaa7496dbeb2b9eb432a378"
+   }
+  ]
+ },
+ "dec2026-pandemic-hire": {
+  "bubbles": {
+   "1": 1,
+   "10": 0,
+   "11": 0,
+   "12": 1,
+   "13": 2,
+   "14": 1,
+   "15": 1,
+   "2": 1,
+   "3": 0,
+   "4": 2,
+   "5": 2,
+   "6": 0,
+   "7": 2,
+   "8": 0,
+   "9": -1,
+   "90001": 0,
+   "90002": 1,
+   "90003": 2,
+   "90004": 2
+  },
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 44692
+   },
+   "has_objective": false,
+   "num_constraints": 44704,
+   "num_variables": 30145,
+   "raw_sha256": "b3a634874afe280a8d1ae1c8437dcd04c92120fde4cb1131bded3901a4fa630d",
+   "sha256": "1663acc382cd700c9e642fe24ac8819ad111861753e5eb6d19081586a44b30a9"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 44705
+   },
+   "has_objective": true,
+   "num_constraints": 44717,
+   "num_variables": 30147,
+   "raw_sha256": "854a27d94170dfc288ab1464abf42741130c23f84091b1cf8922059f28158c66",
+   "sha256": "d82dfa0fa826a2ffc18a15fb9f1b21d602b9079a2d6432fe9178a48e66cebca8"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44692
+    },
+    "has_objective": true,
+    "num_constraints": 44704,
+    "num_variables": 30145,
+    "raw_sha256": "b1b293e38d23f1881b383b458e34dfabffccd021588e10c51c3613d918e24e44",
+    "sha256": "dc416d614b544b42b55c2c7019e13ae8f62bb6a45812a818ba1113848ad7763a"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44693
+    },
+    "has_objective": true,
+    "num_constraints": 44705,
+    "num_variables": 30145,
+    "raw_sha256": "b796400ac208f83cd5f012a87e82bc5de626b2d74106692b36f21f9ca3bfa8f3",
+    "sha256": "e6351aad260832fcb71e64381165d21dd4b9d26cea0cf17cd90e6ff11ed2cb6c"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44694
+    },
+    "has_objective": true,
+    "num_constraints": 44706,
+    "num_variables": 30145,
+    "raw_sha256": "ce839687f714c0e7ba07f4a46e8e8481f8ababe2b25ce9c6ae1c0de2b40d5482",
+    "sha256": "d7a50c29bdf6b7b7989398027ed3796698e855b9a8c2b184d98cde2de2d08530"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44705
+    },
+    "has_objective": true,
+    "num_constraints": 44717,
+    "num_variables": 30147,
+    "raw_sha256": "854a27d94170dfc288ab1464abf42741130c23f84091b1cf8922059f28158c66",
+    "sha256": "d82dfa0fa826a2ffc18a15fb9f1b21d602b9079a2d6432fe9178a48e66cebca8"
+   }
+  ]
+ },
+ "dec2026-pandemic-nohire": {
+  "bubbles": {
+   "1": 1,
+   "10": 0,
+   "11": 0,
+   "12": 1,
+   "13": 2,
+   "14": 1,
+   "15": 1,
+   "2": 1,
+   "3": 0,
+   "4": 2,
+   "5": 2,
+   "6": 0,
+   "7": 2,
+   "8": 0,
+   "9": -1,
+   "90001": 0,
+   "90002": 1,
+   "90003": 2,
+   "90004": 2
+  },
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 44696
+   },
+   "has_objective": false,
+   "num_constraints": 44708,
+   "num_variables": 30145,
+   "raw_sha256": "e0403956c9b07f3e2a21a73436395b52033c95199d1897fdcd475428213e7b67",
+   "sha256": "71425b76789a42d5b5a172d17c9267a58b0a5158da33d6d6c7099f8bac2777e8"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 44709
+   },
+   "has_objective": true,
+   "num_constraints": 44721,
+   "num_variables": 30147,
+   "raw_sha256": "1c703a7a7c20e83e7c0d09aca8be63567462043383240bf6e8340ed026e0a7ed",
+   "sha256": "b0d18cefb32bb0a283728788d5e8faed2e994f1cb02d657f8abf974fbecfde24"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44696
+    },
+    "has_objective": true,
+    "num_constraints": 44708,
+    "num_variables": 30145,
+    "raw_sha256": "64ee495f9f577db8d7573da25a362ad2cd917785db4ea90c4840511598c65590",
+    "sha256": "4917a5309e230d38a0fa3f1e0997db08b53ae544bbaaaf5f775b47e3f0ea1d15"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44697
+    },
+    "has_objective": true,
+    "num_constraints": 44709,
+    "num_variables": 30145,
+    "raw_sha256": "5b80dba919b18b5fb8f921bdec0e22abb8192d31d9456ba5c13e2725a202b50b",
+    "sha256": "ce1f96898cf8af83583d78f0efd406bb0f0612bede9b0ee54a6a13820427e2c8"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44698
+    },
+    "has_objective": true,
+    "num_constraints": 44710,
+    "num_variables": 30145,
+    "raw_sha256": "028f13dddaa1e3ded2ed8b6beb023f90e7fa435cb70fb6c2a24712b26c8090f4",
+    "sha256": "66a52190d6c7939ab7803dc49f82040526817da426f107e559fd624b0f598b93"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44709
+    },
+    "has_objective": true,
+    "num_constraints": 44721,
+    "num_variables": 30147,
+    "raw_sha256": "1c703a7a7c20e83e7c0d09aca8be63567462043383240bf6e8340ed026e0a7ed",
+    "sha256": "b0d18cefb32bb0a283728788d5e8faed2e994f1cb02d657f8abf974fbecfde24"
+   }
+  ]
+ },
+ "dec2026_pandemic-normal-hire": {
+  "bubbles": null,
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 20078
+   },
+   "has_objective": false,
+   "num_constraints": 20090,
+   "num_variables": 6709,
+   "raw_sha256": "0f15d3881c78af019334f69c4411d0600f03607d44b40814ed6947e33270c148",
+   "sha256": "ec3668953b4810a7a2cb73ead1236b486d37f17d1d73fff611aacfb356beb24e"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 20090
+   },
+   "has_objective": true,
+   "num_constraints": 20102,
+   "num_variables": 6711,
+   "raw_sha256": "51411a51a78c9a098c48a3408773f78a780a7ef339c8356518c02154ff29015b",
+   "sha256": "3e226c166f7b8151f151e6e4b2a923e8faa136359e564f29c18e5ddfcc7c7f48"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20078
+    },
+    "has_objective": true,
+    "num_constraints": 20090,
+    "num_variables": 6709,
+    "raw_sha256": "d7060fef9e9ab56dbdd518d454e0c883a58e9e25c5d125660bebab7f246a17f4",
+    "sha256": "01072ba9f19f3eb37df0f1776ac307b078233dd4c6546322a865e3f405fb42b6"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20079
+    },
+    "has_objective": true,
+    "num_constraints": 20091,
+    "num_variables": 6709,
+    "raw_sha256": "b6a774eb4958761b934d4aa06c96fc37c629a45072f6ef994033988657417249",
+    "sha256": "f198fad35df948175f0151bb28e78e5d39e54b025527b1fee1159b7166a02b41"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20090
+    },
+    "has_objective": true,
+    "num_constraints": 20102,
+    "num_variables": 6711,
+    "raw_sha256": "51411a51a78c9a098c48a3408773f78a780a7ef339c8356518c02154ff29015b",
+    "sha256": "3e226c166f7b8151f151e6e4b2a923e8faa136359e564f29c18e5ddfcc7c7f48"
+   }
+  ]
+ },
+ "dec2026_pandemic-normal-nohire": {
+  "bubbles": null,
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 20082
+   },
+   "has_objective": false,
+   "num_constraints": 20094,
+   "num_variables": 6709,
+   "raw_sha256": "f67a3ea6d461cbde3c0a764b1656fde1cd3869893d1c398e16b7f91707c1bb4f",
+   "sha256": "c81a8b1feb07e9e51253e7275cbf9b0c6cf00392ecf5fee1468251ba64343871"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 20094
+   },
+   "has_objective": true,
+   "num_constraints": 20106,
+   "num_variables": 6711,
+   "raw_sha256": "339a5a8250caddafdfd87ea9da264d6f95b228c9d661f9353ef4d1faa99a538e",
+   "sha256": "ad9bf3038b2be26f3292418ab3c355c2f6dc9725499d5f89a89f8b605d60ea75"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20082
+    },
+    "has_objective": true,
+    "num_constraints": 20094,
+    "num_variables": 6709,
+    "raw_sha256": "98f63084fbf18a2d85bd0a25edbb1e0af303bb9d6bb11742657775a0e8b3ab79",
+    "sha256": "3680dc7fbdbc8bf934f0b5d1d5569d69f3b7653e0d464e1dfe376680e228ad53"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20083
+    },
+    "has_objective": true,
+    "num_constraints": 20095,
+    "num_variables": 6709,
+    "raw_sha256": "f61dab8e30576a6728dc27b1763ef44229e162128e35f4f3650b4fbdfd453ebc",
+    "sha256": "d66197e9ddba7ef4323e5ec9ba79b6d0d33c5af0ceaf5a7e73ff4ba9d12fa90f"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 20094
+    },
+    "has_objective": true,
+    "num_constraints": 20106,
+    "num_variables": 6711,
+    "raw_sha256": "339a5a8250caddafdfd87ea9da264d6f95b228c9d661f9353ef4d1faa99a538e",
+    "sha256": "ad9bf3038b2be26f3292418ab3c355c2f6dc9725499d5f89a89f8b605d60ea75"
+   }
+  ]
+ },
+ "dec2026_pandemic-pandemic-hire": {
+  "bubbles": {
+   "1": 1,
+   "10": 0,
+   "11": 0,
+   "12": 1,
+   "13": 2,
+   "14": 1,
+   "15": 1,
+   "2": 1,
+   "3": 0,
+   "4": 2,
+   "5": 2,
+   "6": 0,
+   "7": 2,
+   "8": 0,
+   "9": -1,
+   "90001": 0,
+   "90002": 1,
+   "90003": 2,
+   "90004": 2
+  },
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 44692
+   },
+   "has_objective": false,
+   "num_constraints": 44704,
+   "num_variables": 30145,
+   "raw_sha256": "83ffa4eb06ee5edddd651a4f398662fce5bbf5c0bbf4750f80a11cb080e69bed",
+   "sha256": "161f96ff1ac3019f328c608a2fd6279fa6899b1f70392b8269bfa31ba953f7e7"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 44705
+   },
+   "has_objective": true,
+   "num_constraints": 44717,
+   "num_variables": 30147,
+   "raw_sha256": "0e606bdf4823d3748af101954c67e2644519f9572059f50f3161eb0593ba5417",
+   "sha256": "fe14d192e2cf08900f657957d2e4c72506ebdf0a4e3262d5b07b2d42af1bc76d"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44692
+    },
+    "has_objective": true,
+    "num_constraints": 44704,
+    "num_variables": 30145,
+    "raw_sha256": "61e541a357555c0cd4454572845b7235f96544f627a6f0e1f1374d26e98f5c3f",
+    "sha256": "5592b689e0c5cfd70adbda85fabfa7e280acc3e58871a42070494d0cf202bc48"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44693
+    },
+    "has_objective": true,
+    "num_constraints": 44705,
+    "num_variables": 30145,
+    "raw_sha256": "e24d3f2c7d1e1decb6ccfbe3aece29c3f744935e43f0a785759a4ae4b8f49044",
+    "sha256": "bb1c98165be1e4e382effd0230ee978fbfe6b6554a6a031ef0cd0d2c9e0d59e8"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44694
+    },
+    "has_objective": true,
+    "num_constraints": 44706,
+    "num_variables": 30145,
+    "raw_sha256": "c2d6ad4d3d38482838c9297b971ddd978a33cb1e044d759ecd8f3a64ed5227da",
+    "sha256": "3c9153fc85ad4b53c2750f8453da7bb8413cd6d4f27af744dad3915ec0b618ac"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44705
+    },
+    "has_objective": true,
+    "num_constraints": 44717,
+    "num_variables": 30147,
+    "raw_sha256": "0e606bdf4823d3748af101954c67e2644519f9572059f50f3161eb0593ba5417",
+    "sha256": "fe14d192e2cf08900f657957d2e4c72506ebdf0a4e3262d5b07b2d42af1bc76d"
+   }
+  ]
+ },
+ "dec2026_pandemic-pandemic-nohire": {
+  "bubbles": {
+   "1": 1,
+   "10": 0,
+   "11": 0,
+   "12": 1,
+   "13": 2,
+   "14": 1,
+   "15": 1,
+   "2": 1,
+   "3": 0,
+   "4": 2,
+   "5": 2,
+   "6": 0,
+   "7": 2,
+   "8": 0,
+   "9": -1,
+   "90001": 0,
+   "90002": 1,
+   "90003": 2,
+   "90004": 2
+  },
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 44696
+   },
+   "has_objective": false,
+   "num_constraints": 44708,
+   "num_variables": 30145,
+   "raw_sha256": "1a1cfcb75f4b7f05011b196ddb38de33461c132e37e94a7c67077d969c0fd845",
+   "sha256": "c12c565fd221837c4c38c6fa9e62aa0fe67530515fec955bac69223da8478b04"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 44709
+   },
+   "has_objective": true,
+   "num_constraints": 44721,
+   "num_variables": 30147,
+   "raw_sha256": "4e9fde44253b7d6b6400cdecf74c0afdaf507b54bc9d6b628cb5f93ce93dfa42",
+   "sha256": "f52a1ee320565c0dd4ef5b159e981b4a90606eafdf316820ac44fce5fa7b92a6"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44696
+    },
+    "has_objective": true,
+    "num_constraints": 44708,
+    "num_variables": 30145,
+    "raw_sha256": "82223095f3ae2d105fc6cb39ef6c48da7dd672e98752638b595ab9b0f9a92e42",
+    "sha256": "2edccb91d4b84256bbf1b6d0d23482e701bdc55453bc34012c77c4e7ab34a6f5"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44697
+    },
+    "has_objective": true,
+    "num_constraints": 44709,
+    "num_variables": 30145,
+    "raw_sha256": "9470a8e3785888619e453b66c1eb337fe9b95128e74ecc26465ecedf6a742ea6",
+    "sha256": "699399cdd5eec9a6a57d84c2cbc02fc53355d635c560680b121b74995bb5e2cd"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44698
+    },
+    "has_objective": true,
+    "num_constraints": 44710,
+    "num_variables": 30145,
+    "raw_sha256": "153ecebe51e4fd92421df9e2384835c90d535a900436e6817274f8dbb55590f2",
+    "sha256": "9cb5eebd4b0711ab090324bd6e1dd9e7bd9d828af6ee3070fbd72f2d878d1c1f"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 44709
+    },
+    "has_objective": true,
+    "num_constraints": 44721,
+    "num_variables": 30147,
+    "raw_sha256": "4e9fde44253b7d6b6400cdecf74c0afdaf507b54bc9d6b628cb5f93ce93dfa42",
+    "sha256": "f52a1ee320565c0dd4ef5b159e981b4a90606eafdf316820ac44fce5fa7b92a6"
+   }
+  ]
+ },
+ "h30-normal-hire": {
+  "bubbles": null,
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 38814
+   },
+   "has_objective": false,
+   "num_constraints": 38826,
+   "num_variables": 12847,
+   "raw_sha256": "666ec3607f914f6957da1c19b28c4a71d705644b12b0e92127dd5bf16444df53",
+   "sha256": "093d7b86911dbd007fbbea31bc27e24cfca8f32c3f6064b4da92333c1e95a912"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 38826
+   },
+   "has_objective": true,
+   "num_constraints": 38838,
+   "num_variables": 12849,
+   "raw_sha256": "8e116779c69eca3a3588bed025f4267c02611a159de6c297a7bd1eaa86bcf2e8",
+   "sha256": "b6c42af3f4ddad2194e49df72097af05b0ffc72465ea2c4d65599d8febb1fe3b"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 38814
+    },
+    "has_objective": true,
+    "num_constraints": 38826,
+    "num_variables": 12847,
+    "raw_sha256": "3783e4c89ba1d1172092d4d02a46fb9a3423bff7c750a973df3d864df2f4f84e",
+    "sha256": "5157b4c915b7961e1b298c136ce203836c3c39b08759ee34c6f054482b1c88d8"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 38815
+    },
+    "has_objective": true,
+    "num_constraints": 38827,
+    "num_variables": 12847,
+    "raw_sha256": "ba54eaeb1f2eeff5334d58eea2cb0d37bed073b1c8542c09dd7adbdc8d8f5132",
+    "sha256": "37c283d8203d39740a8550b81dcd38dd8dc15e0f2ad4d2b93e33c1764f5e597a"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 38826
+    },
+    "has_objective": true,
+    "num_constraints": 38838,
+    "num_variables": 12849,
+    "raw_sha256": "8e116779c69eca3a3588bed025f4267c02611a159de6c297a7bd1eaa86bcf2e8",
+    "sha256": "b6c42af3f4ddad2194e49df72097af05b0ffc72465ea2c4d65599d8febb1fe3b"
+   }
+  ]
+ },
+ "h30-normal-nohire": {
+  "bubbles": null,
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 38818
+   },
+   "has_objective": false,
+   "num_constraints": 38830,
+   "num_variables": 12847,
+   "raw_sha256": "12e3eed40444db5d614715d83221f2eab7084671bf807f6bdd342f211776eb46",
+   "sha256": "d62b96191591caae3c10773384c3b54cf617da1f7b292d583465dae5141ab232"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 38830
+   },
+   "has_objective": true,
+   "num_constraints": 38842,
+   "num_variables": 12849,
+   "raw_sha256": "387a8fe0ebf62d02206c797d844f0757ea4dfe2c36b93f6e0f48842e9c1ce588",
+   "sha256": "7fe44fd387013f59273afb38150c9c13be71703d685aa931415a17e3f1bb3dbb"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 38818
+    },
+    "has_objective": true,
+    "num_constraints": 38830,
+    "num_variables": 12847,
+    "raw_sha256": "8c81e2dfb9ae37634ef31ef7c59e615b6c64b667fd682402790da6c458a5e25d",
+    "sha256": "449c17c630da0315aeecd23c099646a7b9318eb1759df86c9d13f452972e9a81"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 38819
+    },
+    "has_objective": true,
+    "num_constraints": 38831,
+    "num_variables": 12847,
+    "raw_sha256": "4cead37a57a071d26872bafaa4c8e9cc5f73ef13391d5506921e2b4c18d7637e",
+    "sha256": "568f20ce29161bfbda268dc7f1a62749f4021151620af6a397cb7832c4ea5518"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 38830
+    },
+    "has_objective": true,
+    "num_constraints": 38842,
+    "num_variables": 12849,
+    "raw_sha256": "387a8fe0ebf62d02206c797d844f0757ea4dfe2c36b93f6e0f48842e9c1ce588",
+    "sha256": "7fe44fd387013f59273afb38150c9c13be71703d685aa931415a17e3f1bb3dbb"
+   }
+  ]
+ },
+ "h30-pandemic-hire": {
+  "bubbles": {
+   "1": 2,
+   "10": 2,
+   "11": 1,
+   "12": 1,
+   "13": 2,
+   "14": 0,
+   "15": 0,
+   "16": 0,
+   "17": 0,
+   "18": 2,
+   "19": 2,
+   "2": 1,
+   "20": 2,
+   "21": 1,
+   "22": 1,
+   "23": 0,
+   "24": -1,
+   "25": 0,
+   "26": 1,
+   "27": 0,
+   "28": 0,
+   "29": 2,
+   "3": 1,
+   "30": 2,
+   "4": 1,
+   "5": 0,
+   "6": 2,
+   "7": 0,
+   "8": 1,
+   "9": -1,
+   "90001": 2,
+   "90002": 0,
+   "90003": 1,
+   "90004": 1
+  },
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 124739
+   },
+   "has_objective": false,
+   "num_constraints": 124751,
+   "num_variables": 96392,
+   "raw_sha256": "fa9139be21305cc0a5f43a2d740c9c4fd56a7a94e6eeebc61ac353f1cba863ef",
+   "sha256": "00b90630c294fa2a594ee90e15733846c146c12e14bd8b7ac2835f7f54efa64e"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 124752
+   },
+   "has_objective": true,
+   "num_constraints": 124764,
+   "num_variables": 96394,
+   "raw_sha256": "f3282ac37ba45571c131032c665b55d493a36070860c107393f49b02baf136a4",
+   "sha256": "5acb1770547af6f4fa98b594fcea10d985a9c4ad559328a997088ced23eb2765"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 124739
+    },
+    "has_objective": true,
+    "num_constraints": 124751,
+    "num_variables": 96392,
+    "raw_sha256": "ddf55da30e167fa73fdd29984594c1cad5eda95b863bffeee8fcad802d6b6e4f",
+    "sha256": "76da043c60d54567b15f865704400f44eaff07485d591bf7f4fe6f3f91d9a040"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 124740
+    },
+    "has_objective": true,
+    "num_constraints": 124752,
+    "num_variables": 96392,
+    "raw_sha256": "3af0b830f837983e3cbf8d21a8cf4ee4e7d083cb6bb670c9199044a37bd01107",
+    "sha256": "1b7479a5899c4527486ce932da09b1ecf9ee94f9c24d2d57aa0cd99d1ba15bb3"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 124741
+    },
+    "has_objective": true,
+    "num_constraints": 124753,
+    "num_variables": 96392,
+    "raw_sha256": "b65cac89a7ff7250b68e5657b5a8f457b2f3bcd49e88abc940a2cc3aad597f45",
+    "sha256": "552f20982834e2af8abe036a74b12b729e13c038ee240951f98042e2cbac0432"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 124752
+    },
+    "has_objective": true,
+    "num_constraints": 124764,
+    "num_variables": 96394,
+    "raw_sha256": "f3282ac37ba45571c131032c665b55d493a36070860c107393f49b02baf136a4",
+    "sha256": "5acb1770547af6f4fa98b594fcea10d985a9c4ad559328a997088ced23eb2765"
+   }
+  ]
+ },
+ "h30-pandemic-nohire": {
+  "bubbles": {
+   "1": 2,
+   "10": 2,
+   "11": 1,
+   "12": 1,
+   "13": 2,
+   "14": 0,
+   "15": 0,
+   "16": 0,
+   "17": 0,
+   "18": 2,
+   "19": 2,
+   "2": 1,
+   "20": 2,
+   "21": 1,
+   "22": 1,
+   "23": 0,
+   "24": -1,
+   "25": 0,
+   "26": 1,
+   "27": 0,
+   "28": 0,
+   "29": 2,
+   "3": 1,
+   "30": 2,
+   "4": 1,
+   "5": 0,
+   "6": 2,
+   "7": 0,
+   "8": 1,
+   "9": -1,
+   "90001": 2,
+   "90002": 0,
+   "90003": 1,
+   "90004": 1
+  },
+  "build": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 124743
+   },
+   "has_objective": false,
+   "num_constraints": 124755,
+   "num_variables": 96392,
+   "raw_sha256": "a7dbb8f5a9f7152d04a792cd3c7f8b20bf6d10990e17296a33a4641203880cc5",
+   "sha256": "d064b6ee1eee732e0cdd1566742df356c5f6a0865c9f456026cee0c63a279309"
+  },
+  "final": {
+   "constraint_types": {
+    "int_prod": 4,
+    "lin_max": 8,
+    "linear": 124756
+   },
+   "has_objective": true,
+   "num_constraints": 124768,
+   "num_variables": 96394,
+   "raw_sha256": "4387f0d600efc8d524ff6de9e0c4c6bdf3d30de79db356cb5820999cf7ef7637",
+   "sha256": "65caa59b5e6dc3b359e209571779800d059c8f9c9f3ad638afae514045829350"
+  },
+  "solve_calls": [
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 124743
+    },
+    "has_objective": true,
+    "num_constraints": 124755,
+    "num_variables": 96392,
+    "raw_sha256": "92074f6170e606cf72fb739bad0194796aff3ba0ff68572b60586fc4fb4443d4",
+    "sha256": "88ace63b0310f95b18b3bd5e4441fa73ac0124b21145f0588665c54fe994db0d"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 124744
+    },
+    "has_objective": true,
+    "num_constraints": 124756,
+    "num_variables": 96392,
+    "raw_sha256": "aa39cc3c598d2287d3a118bc615e155bcafe37bceab0c0604d9327da9fb5f2a0",
+    "sha256": "bfd3f6507b5bcd8ab66c511df7d900aec9f8027c38adbfb675fde0e147839964"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 124745
+    },
+    "has_objective": true,
+    "num_constraints": 124757,
+    "num_variables": 96392,
+    "raw_sha256": "5e26544a4d97319a65872177b161a9c103e499db6f3c0f5e6d48046bf99fa656",
+    "sha256": "1af4cbe442af241eee0d39202dfa33f5dedaf039c31cbf5da2a5a6c3ee4fb267"
+   },
+   {
+    "constraint_types": {
+     "int_prod": 4,
+     "lin_max": 8,
+     "linear": 124756
+    },
+    "has_objective": true,
+    "num_constraints": 124768,
+    "num_variables": 96394,
+    "raw_sha256": "4387f0d600efc8d524ff6de9e0c4c6bdf3d30de79db356cb5820999cf7ef7637",
+    "sha256": "65caa59b5e6dc3b359e209571779800d059c8f9c9f3ad638afae514045829350"
+   }
+  ]
+ }
+}
