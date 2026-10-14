@@ -22,7 +22,9 @@ week) must not exceed the doctor's weekly hour limit for that week.
 
 ## H5
 A doctor who needs a mentor may only work a shift if at least one specialist from `m.p.specialists`
-works the same shift.
+works the same shift. Write it as one inequality per such doctor and shift: the doctor's assignment
+is at most the number of specialists from `m.p.specialists` working the shift. The doctor itself is
+counted if it is in `m.p.specialists`; do not exclude it.
 
 ## H6
 In every window of three consecutive days of the horizon (consecutive entries of the day list), a

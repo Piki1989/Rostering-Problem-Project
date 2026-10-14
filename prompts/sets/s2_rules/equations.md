@@ -19,7 +19,7 @@ The hours a doctor works in a calendar week must not exceed the doctor's limit f
 
 ## H5
 A doctor who needs a mentor may only work a shift together with at least one specialist from
-`m.p.specialists`.
+`m.p.specialists`. A doctor who is a specialist counts as that specialist.
 
 ## H6
 Any three consecutive days of the horizon contain at most two night shifts of the same doctor.

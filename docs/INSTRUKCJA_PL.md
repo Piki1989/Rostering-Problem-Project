@@ -152,8 +152,10 @@ Przydatne opcje:
 Każdy przebieg tworzy folder `runs/<data>_<zestaw>_<dostawca>_<model>/`:
 
 ```text
-report.md            <- czytelny raport (zacznij od tego)
-summary.csv          <- to samo w tabeli (do Excela / pandas)
+report.html          <- raport z wykresami i metrykami (zacznij od tego)
+report.md            <- krótki raport tekstowy
+summary.csv          <- wynik każdego równania w tabeli (do Excela / pandas)
+metrics.csv          <- wszystkie metryki (zgodność, cosinusy, ilość informacji)
 config.json          <- ustawienia przebiegu
 H3/attempt_1/
     prompt.md        <- dokładnie to, co dostał model
@@ -207,7 +209,7 @@ uv run python -m rostering.prompting benchmark H3 H8 C1 D2b F1 U2 O1 O3 --repeat
 - Tylko wybrane zestawy: `--sets s1_intent s2_rules`.
 - Z poprawkami po błędach: `--attempts 3`. Raport pokazuje wtedy osobno „za pierwszym razem” i „łącznie”.
 
-Wynik: `runs/benchmark_<data>_claude-cli_<model>/report.md`:
+Wynik: `runs/benchmark_<data>_claude-cli_<model>/report.html` (wykresy, patrz 5.1) i `report.md`:
 - **Tabela 1** - skuteczność każdego zestawu (łącznie, za pierwszym razem, osobno dla ograniczeń / definicji / celów).
 - **Tabela 2** - macierz równanie × zestaw: ile powtórzeń przeszło (np. `2/3`).
 - Surowe dane do analizy: `benchmark.csv` (jeden wiersz = zestaw, powtórzenie, równanie).
@@ -224,6 +226,52 @@ Przykład z pilotażu (Sonnet, 8 równań, 1 powtórzenie, przed doprecyzowaniem
 
 Po doprecyzowaniu opisów w `s3_spec` pełny przebieg 33 równań dał 32/33. Jedyny błąd (H7) po
 doprecyzowaniu przechodzi 3/3. F1-F4 po doprecyzowaniu przechodzą 2/2.
+
+### 5.1 Raport HTML z wykresami i metrykami
+
+Po każdym `run` i `benchmark` automatycznie powstaje `report.html` (otwórz w przeglądarce) oraz
+`metrics.csv` (wszystkie liczby, wiersz = jedna odpowiedź modelu). Raport dla dowolnego,
+także starszego, przebiegu wygenerujesz tak:
+
+```bash
+uv run python -m rostering.prompting report runs/<przebieg lub benchmark>
+uv run python -m rostering.prompting report runs/<...> --offline   # działa bez internetu (plik ~4 MB)
+open runs/<...>/report.html                                         # macOS: otwórz w przeglądarce
+```
+
+Metryki w raporcie (poza samym PASS/FAIL):
+
+| Metryka | Co mierzy | Jak czytać |
+|---|---|---|
+| **passed** | odsetek równań, które przeszły weryfikację | główny wynik |
+| **1st attempt** | to samo, ale tylko pierwsza próba (bez podpowiedzi) | ważne przy `--attempts > 1` |
+| **agreement** (zgodność behawioralna) | odsetek 30 grafików testowych, na których kod zachowuje się jak specyfikacja | 1,00 = zawsze dobrze; 0,90 = myli się w 10% przypadków. Pokazuje „prawie dobre” rozwiązania, które w PASS/FAIL liczą się jako 0 |
+| **code cos. lexical** | podobieństwo cosinusowe (TF-IDF) tokenów kodu do naszej implementacji | jak bardzo kod „wygląda” jak nasz (nazwy, wywołania API) |
+| **code cos. AST** | podobieństwo cosinusowe (TF-IDF) struktury drzewa składni (pary typów węzłów) | podobieństwo „kształtu” kodu, niezależne od nazw zmiennych i komentarzy |
+| **words / description** | średnia liczba słów opisu równania w zestawie | ile informacji dostał model |
+| **cos. to formal** | podobieństwo cosinusowe (TF-IDF, bez słów funkcyjnych) opisu do formalnej definicji równania | jak blisko opis jest „wzoru” |
+| **std over repeats** | odchylenie standardowe skuteczności między powtórzeniami | stabilność wyniku (słupki błędów na wykresie) |
+
+Co to jest cosinus: każdy kod (lub tekst) zamieniamy na wektor liczności „słów”. Cosinus kąta
+między dwoma wektorami to 1 dla identycznego składu i 0 dla zupełnie innego. Ważenie TF-IDF zmniejsza
+wagę elementów występujących w każdym kodzie (np. `m`, `model`, nawiasy), więc liczy się to, co
+charakterystyczne dla danego równania.
+
+Wykresy w raporcie:
+- skuteczność i zgodność dla każdego zestawu (ze słupkami błędów z powtórzeń);
+- krzywa „ilość informacji → skuteczność”;
+- mapy cieplne równanie × zestaw (PASS i zgodność);
+- podział na ograniczenia, definicje i cele;
+- wykres „czy podobny kod = poprawny kod?” (cosinus AST vs zgodność);
+- rozkłady podobieństwa cosinusowego;
+- podobieństwo opisów do definicji formalnej;
+- liczba prób (przy `--attempts`).
+
+Na dole raportu jest lista nieudanych odpowiedzi z pierwszym kontrprzykładem.
+
+**Uwaga interpretacyjna.** Podobieństwo cosinusowe kodu to miara pomocnicza, nie miara poprawności.
+Poprawny kod może wyglądać zupełnie inaczej niż nasz (np. `AddBoolOr` zamiast nierówności), a kod
+bardzo podobny może mieć jeden błędny znak. O poprawności decyduje weryfikacja i agreement.
 
 ---
 

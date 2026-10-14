@@ -7,6 +7,7 @@
     uv run python -m rostering.prompting run --provider manual                   # answer the prompts by hand ...
     uv run python -m rostering.prompting check runs/<run>                        # ... then verify the answers
     uv run python -m rostering.prompting run --provider reference                # sanity check of the pipeline
+    uv run python -m rostering.prompting report runs/<run or benchmark>          # HTML report with charts
 
 A prompt = prompts/template.md filled with the interface contract (prompts/contract.md) and the
 description of the equation from a prompt set (prompts/sets/<set>/equations.md). The sets differ
@@ -378,6 +379,15 @@ def write_report(run_dir: Path, results: list[EquationRun], meta: dict) -> None:
     (run_dir / "report.md").write_text("\n".join(lines) + "\n")
 
 
+def html_report(path: Path) -> None:
+    """report.html with charts and similarity metrics; a failure here must not lose the run."""
+    try:
+        from .report import build_report
+        print(f"HTML report: {build_report(path)}")
+    except Exception as exc:
+        print(f"HTML report not created: {type(exc).__name__}: {exc}")
+
+
 def _git_commit() -> str:
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
@@ -415,6 +425,8 @@ def run(args, provider: Provider | None = None) -> Path:
         results = list(pool.map(task, ids))
     write_report(run_dir, results, meta)
     print(f"\nReport: {run_dir / 'report.md'}")
+    if not getattr(args, "in_benchmark", False):
+        html_report(run_dir)
     return run_dir
 
 
@@ -455,7 +467,8 @@ def benchmark(args) -> Path:
     for set_name in sets:
         for repeat in range(1, args.repeats + 1):
             print(f"\n=== set {set_name}, repeat {repeat}/{args.repeats} ===", flush=True)
-            run_args = argparse.Namespace(**{**vars(args), "set": set_name, "out": bench_dir / f"{set_name}_r{repeat}"})
+            run_args = argparse.Namespace(**{**vars(args), "set": set_name, "out": bench_dir / f"{set_name}_r{repeat}",
+                                             "in_benchmark": True})
             run_dir = run(run_args, provider)
             with open(run_dir / "summary.csv") as f:
                 for row in csv.DictReader(f):
@@ -469,6 +482,7 @@ def benchmark(args) -> Path:
         writer.writerows(rows)
     write_benchmark_report(bench_dir, rows, sets, meta)
     print(f"\nBenchmark report: {bench_dir / 'report.md'}")
+    html_report(bench_dir)
     return bench_dir
 
 
@@ -539,6 +553,10 @@ def main(argv: list[str] | None = None) -> int:
     p_bench.add_argument("--out", help="benchmark directory (default runs/benchmark_<timestamp>_...)")
     _add_model_options(p_bench)
 
+    p_report = sub.add_parser("report", help="HTML report with charts and similarity metrics for a run or benchmark")
+    p_report.add_argument("path")
+    p_report.add_argument("--offline", action="store_true", help="embed plotly.js (no internet needed, ~4 MB)")
+
     p_check = sub.add_parser("check", help="verify answers pasted into a manual run")
     p_check.add_argument("run_dir")
     p_check.add_argument("--samples", type=int, default=30)
@@ -561,8 +579,12 @@ def main(argv: list[str] | None = None) -> int:
         run(args)
     elif args.command_name == "benchmark":
         benchmark(args)
+    elif args.command_name == "report":
+        from .report import build_report
+        print(f"HTML report: {build_report(Path(args.path), offline=args.offline)}")
     else:
         check(args)
+        html_report(Path(args.run_dir))
     return 0
 
 

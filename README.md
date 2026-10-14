@@ -103,7 +103,13 @@ uv run python -m rostering.prompting benchmark --model sonnet --repeats 3   # co
 uv run python -m rostering.prompting run --provider manual                  # write prompts, answer by hand ...
 uv run python -m rostering.prompting check runs/<run>                       # ... then verify the answers
 uv run python -m rostering.prompting run --provider reference               # sanity check of the pipeline
+uv run python -m rostering.prompting report runs/<run or benchmark>         # HTML report with charts
 ```
+
+Every run and benchmark also writes `report.html` with interactive charts and `metrics.csv`. Besides pass/fail they contain continuous metrics (`rostering/similarity.py`):
+- **behavioural agreement**: the share of test schedules handled like the specification;
+- **TF-IDF cosine similarity of the code to the reference**: lexical (tokens) and structural (AST node-type pairs);
+- **amount of information of the prompt description**: words, and its TF-IDF cosine to the formal statement.
 
 Providers:
 - **`claude-cli`**: Claude Code CLI with no tools, no MCP servers and no session, run in an empty temporary directory, so the model cannot read the repository.

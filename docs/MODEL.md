@@ -193,3 +193,6 @@ These scores are computed from the solution and are not part of the optimisation
    * Only about 40 % of the possible monthly hours are allowed for opt-out doctors.
    * Example: with `M_d = 248`, `H_d` cannot be 162-169.
    * This affects 8 of the 14 doctors in `doctors_with_cost.csv`.
+10. **Specialists who "need a mentor" are their own mentors.** In `doctors_with_cost.csv` doctors
+    6, 7 and 8 are specialists with `needs_mentor = 1`. H5 counts the doctor itself among the
+    specialists on the shift, so the requirement never binds for them.
