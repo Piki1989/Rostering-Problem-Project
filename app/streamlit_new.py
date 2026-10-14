@@ -1,26 +1,28 @@
-import streamlit as st
-import pandas as pd
 import sys
-from pathlib import Path
-from streamlit_calendar import calendar
 from datetime import datetime, timedelta
-import altair as alt
-from compute_global_metrics import *
-from pareto_utils import *
-import plotly.express as px
-import altair as alt
+from pathlib import Path
 
+import altair as alt
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+from streamlit_calendar import calendar
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT_DIR))
 
+from pareto_utils import load_all_summaries, pareto_front, pareto_front_2d  # noqa: E402
+from pandemic_ui import render_pandemic_tab  # noqa: E402
+from rostering import RunConfig, run_model_and_get_results  # noqa: E402
+from rostering.config import DATA_DIR, DATASETS  # noqa: E402
+from rostering.emergency_replacement import precompute_replacements  # noqa: E402
+from rostering.metrics import compute_hospital_efficiency_v2  # noqa: E402
+
+# Dataset and pandemic mode: ROSTERING_DATASET=<name> ROSTERING_PANDEMIC=0/1 (see rostering/config.py).
+RUN_CONFIG = RunConfig.from_env()
+
 EXPORT_ROOT = ROOT_DIR / "exports"
 EXPORT_ROOT.mkdir(exist_ok=True)
-
-from model.model_ref import run_model_and_get_results
-from model.emergency_replacement_new import find_replacement, precompute_replacements
-
-from pandemic_ui import render_pandemic_tab
 
 def filter_active_doctors(data: dict) -> dict:
     stats = data["stats_df"]
@@ -701,16 +703,15 @@ Comparison of two scenarios:
 
 @st.cache_resource(show_spinner=False)
 def run_model():
-    return run_model_and_get_results(
-        pandemic_mode=True
-    )
+    return run_model_and_get_results(config=RUN_CONFIG)
 
 with st.spinner("Running optimization model (this may take a few minutes)..."):
     results = run_model()
 
     baseline = results["baseline"]
-    reserve_df = pd.read_csv("data/reserve/reserve_doctors.csv")
-    candidates_df = pd.read_csv("data/doctors_to_hire/doctors_to_hire.csv")
+    dataset_files = DATASETS[RUN_CONFIG.dataset]
+    reserve_df = pd.read_csv(DATA_DIR / dataset_files.reserve)
+    candidates_df = pd.read_csv(DATA_DIR / dataset_files.candidates)
 
     replacements = precompute_replacements(
         results=baseline,
@@ -723,7 +724,7 @@ current_run = results.get("run")
 baseline = results["baseline"]
 hire_allowed = results.get("hire_allowed")
 
-RESULTS_DIR = ROOT_DIR / "results" / "mar_2026"
+RESULTS_DIR = RUN_CONFIG.output_dir()
 
 if RESULTS_DIR.exists():
     try:

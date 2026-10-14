@@ -1,26 +1,10 @@
 """
-Pandemic Mode for the Hospital Rostering Optimizer.
+Pandemic mode for the hospital rostering optimizer.
 
 Definition of contact:
-  - Sharing the same shift in WARD or ICU = epidemiological contact
-  - CLINIC excluded by default (separate offices)
-  - Handover periods: optional handover_window_hours (default: 0)
-
-Emergency replacement in pandemic mode:
-  - Replacement only from the same bubble (contact departments)
-  - External reserve staff allowed with a warning
-  - Additional physicians may be hired (only during schedule construction)
-"""
-from __future__ import annotations
-
-"""
-Pandemic Mode for the Hospital Rostering Optimizer.
-
-Phase 1 + 2 redesign.
-
-Key concepts:
   - Contact = sharing a shift in a contact department (default: WARD, ICU).
   - CLINIC excluded by default (separate offices, individual quarantine policy).
+  - Handover periods: optional handover_window_hours (default: 0).
   - Adaptive bubble count via `suggest_num_bubbles(...)`.
   - Pure-CLINIC physicians live OUTSIDE the bubble system in a CLINIC_POOL
     (bubble id = -1) and only get individual quarantine.
@@ -39,13 +23,18 @@ Replacement during a quarantine:
     (rest, skills, eligibility, day-off-after-night, max consecutive
     nights, weekly day limits, bubble isolation) are respected for
     both regular doctors and reserves.
+  - Replacement only from the same bubble (contact departments); external
+    reserve staff allowed with a warning; additional physicians may be hired
+    only during schedule construction.
 
 Backwards-compatible:
   - `simulate_quarantine`, `simulate_quarantine_with_reserve`,
     `find_replacement_pandemic` remain available with the same signatures
-    and now delegate to v2 internally.
+    and delegate to v2 internally.
 """
+from __future__ import annotations
 
+import logging
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -55,7 +44,9 @@ from math import ceil
 import pandas as pd
 from ortools.sat.python import cp_model
 
-from model.emergency_replacement_new import find_replacement
+from .emergency_replacement import find_replacement
+
+logger = logging.getLogger(__name__)
 
 
 # Special bubble id for physicians who are NOT in any bubble (CLINIC pool).
@@ -409,20 +400,19 @@ def prepare_pandemic_bubbles(
     if candidates is not None and not candidates.empty:
         distribute(normalise(candidates), is_candidate=True)
 
-    print("\n[PandemicMode] === Bubble assignment ===")
-    print(f"  Doctors: {len(doctors)} | Candidates: {len(candidates)}")
-    print(f"  Bubbles: {B} | Contact departments: {config.contact_depts}")
-    print(f"  CLINIC pool separated: {config.separate_clinic_pool}")
+    logger.info(
+        "Bubble assignment: %d doctors, %d candidates, %d bubbles, contact departments %s, "
+        "separate CLINIC pool: %s",
+        len(doctors), len(candidates), B, config.contact_depts, config.separate_clinic_pool,
+    )
     for b in range(B):
         s = bubble_stats[b]
-        print(
-            f"  Bubble {b}: {s['size']} doctors (incl. {s['candidates']} candidates) | "
-            f"{s['specialists']} specialists, {s['icu']} ICU, "
-            f"{s['night']} night"
+        logger.info(
+            "  Bubble %d: %d doctors (incl. %d candidates) | %d specialists, %d ICU, %d night",
+            b, s["size"], s["candidates"], s["specialists"], s["icu"], s["night"],
         )
     if clinic_only_ids:
-        print(f"  CLINIC_POOL: {len(clinic_only_ids)} doctors (no bubble, individual quarantine)")
-    print()
+        logger.info("  CLINIC_POOL: %d doctors (no bubble, individual quarantine)", len(clinic_only_ids))
 
     return assignment
 
@@ -512,9 +502,7 @@ def validate_bubbles(
     validation_df = pd.DataFrame(rows)
     is_safe = not any(i["severity"] == "ERROR" for i in issues)
 
-    print("\n[PandemicMode] === Bubble validation ===")
-    print(validation_df.to_string(index=False))
-    print()
+    logger.info("Bubble validation:\n%s", validation_df.to_string(index=False))
 
     return {
         "validation_df": validation_df,
@@ -547,9 +535,8 @@ def add_pandemic_constraints(
         s for s in S if shifts.loc[shift_idx[s], "dept"] in contact_depts
     ]
 
-    print(f"[PandemicMode] Adding HC-P1 constraints:")
-    print(f"  Contact departments: {contact_depts}")
-    print(f"  Contact shifts: {len(contact_shifts)} / {len(S)}")
+    logger.info("Pandemic constraints: contact departments %s, contact shifts %d / %d",
+                contact_depts, len(contact_shifts), len(S))
 
     crossbubble_violations = []
     constraint_count = 0
@@ -580,7 +567,7 @@ def add_pandemic_constraints(
                     crossbubble_violations.append(viol)
                     constraint_count += 1
 
-    print(f"  Added {constraint_count} pandemic constraints.")
+    logger.info("Added %d pandemic constraints", constraint_count)
     return {
         "crossbubble_violations": crossbubble_violations,
     }

@@ -1,6 +1,7 @@
 """
 Streamlit UI component for the Pandemic Mode tab.
 """
+from __future__ import annotations
 
 import streamlit as st
 import pandas as pd
@@ -8,11 +9,9 @@ import altair as alt
 from streamlit_calendar import calendar
 from datetime import datetime, timedelta
 
-from pandemic_mode import (
-    PandemicConfig,
+from rostering.pandemic import (
     bubble_summary_df,
     bubble_contact_matrix,
-    simulate_quarantine,
     find_replacement_pandemic,
     suggest_num_bubbles,
     QuarantineEvent,

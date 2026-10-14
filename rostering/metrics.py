@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 
 def _clip01(x: float) -> float:

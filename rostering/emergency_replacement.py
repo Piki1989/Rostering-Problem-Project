@@ -689,7 +689,3 @@ def format_replacement_report(result: dict) -> str:
 
     lines.append("=" * 65)
     return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    print("Module loaded. Usage: from emergency_replacement import find_replacement")
