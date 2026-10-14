@@ -446,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--show", type=int, default=5, help="failures to print per equation")
     parser.add_argument("--markdown", metavar="PATH", help="write the equation contracts (docs/EQUATIONS.md)")
+    parser.add_argument("--json", action="store_true", help="print one JSON line per equation")
     args = parser.parse_args(argv)
 
     if args.markdown:
@@ -460,13 +461,30 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("give an equation id, --all or --list")
 
     ids = list(EQUATIONS) if args.all else [args.equation]
-    impl = load_function(args.impl) if args.impl else None
+    try:
+        impl = load_function(args.impl) if args.impl else None
+    except Exception as exc:                  # syntax error, missing function, failing import ...
+        message = f"cannot load {args.impl}: {type(exc).__name__}: {exc}"
+        if args.json:
+            print(json.dumps({"equation": ids[0], "passed": False, "samples": 0, "outcomes": {},
+                              "failures": [message], "seconds": 0}))
+        else:
+            print(message)
+        return 1
     ok = True
     for eq_id in ids:
-        result = check_equation(eq_id, impl, samples=args.samples, seed=args.seed)
-        print(result.summary(), flush=True)
-        for failure in result.failures[:args.show]:
-            print("      " + failure)
+        try:
+            result = check_equation(eq_id, impl, samples=args.samples, seed=args.seed)
+        except Exception as exc:              # an implementation may raise while building the model
+            result = Result(eq_id, failures=[f"error while building or solving: {type(exc).__name__}: {exc}"])
+        if args.json:
+            print(json.dumps({"equation": eq_id, "passed": result.passed, "samples": result.samples,
+                              "outcomes": result.outcomes, "failures": result.failures,
+                              "seconds": round(result.seconds, 2)}), flush=True)
+        else:
+            print(result.summary(), flush=True)
+            for failure in result.failures[:args.show]:
+                print("      " + failure)
         ok &= result.passed
     return 0 if ok else 1
 

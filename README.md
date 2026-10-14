@@ -75,6 +75,41 @@ uv run python -m rostering.verify --all
 uv run python -m rostering.verify H3 --impl candidate.py:my_h3
 ```
 
+## Prompts: implementing the equations with an AI model
+
+`rostering.prompting` builds one prompt per equation, sends it to a model, extracts the code and verifies it as above. It can optionally send the failures back for a corrected version.
+- The prompts are assembled from editable files in `prompts/`:
+  - `template.md`
+  - `contract.md` (interface)
+  - `equations.md` (natural-language description of every equation)
+  - `system.md`
+  - `feedback.md`
+- `--level formal` adds the formal statement of the equation to the prompt.
+
+```bash
+uv run python -m rostering.prompting prompts --out prompts_preview                 # only write the prompts
+uv run python -m rostering.prompting run --provider claude-cli --model sonnet      # all equations
+uv run python -m rostering.prompting run H3 O3 --provider claude-cli --attempts 3  # chosen equations, with feedback
+uv run python -m rostering.prompting run --provider manual                         # write prompts, answer by hand ...
+uv run python -m rostering.prompting check runs/<run>                              # ... then verify the answers
+uv run python -m rostering.prompting run --provider reference                      # sanity check of the pipeline
+```
+
+Providers:
+- **`claude-cli`**: Claude Code CLI with no tools, no MCP servers and no session, run in an empty temporary directory, so the model cannot read the repository.
+- **`anthropic`**: the API. Needs `uv sync --extra llm` and `ANTHROPIC_API_KEY`.
+- **`command`**: any command that reads the prompt on stdin and prints the answer, e.g. `--command "ollama run qwen2.5-coder"`.
+- **`manual`**: writes the prompts; you paste the answers yourself.
+- **`reference`**: answers with the reference implementation.
+
+Each run is saved in `runs/<timestamp>_<provider>_<model>_<level>/` (ignored by git). It contains, for every equation and attempt:
+- the prompt, the raw answer and the extracted code;
+- the verification result.
+
+It also contains `summary.csv` and `report.md`.
+
+The generated code runs locally in a separate process with a time limit. This isolates crashes, but it is not a sandbox, so check the code of models you do not trust.
+
 ## Tests
 
 ```bash
@@ -90,3 +125,7 @@ uv run pytest
 `tests/test_equations.py` covers the equations one by one.
 - Every reference equation must agree with its oracle.
 - Ten deliberately wrong implementations must be rejected.
+
+`tests/test_prompting.py` tests the prompt pipeline without calling a model.
+- It checks that the prompts contain no reference code.
+- It checks code extraction, the feedback loop and the manual mode.

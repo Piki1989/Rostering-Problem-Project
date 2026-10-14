@@ -213,3 +213,7 @@ scheduler
 output
 analysis
 exports
+
+# Prompt runs (rostering.prompting)
+runs/
+prompts_preview/
