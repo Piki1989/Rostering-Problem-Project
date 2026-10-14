@@ -6,6 +6,8 @@ checks that the code still produces the same model as the original implementatio
 (`model/model_ref.py`, commit `a2610f5`).
 
 Notation: `⌊·⌋` is integer truncation (`int()` in Python), `|X|` the size of a set.
+Every equation is a separate function in `rostering/equations.py`; their ids (H1, C1, D1, F1, U1,
+O1, ...) and contracts are listed in `docs/EQUATIONS.md`.
 
 ## 1. Sets
 
@@ -183,3 +185,9 @@ These scores are computed from the solution and are not part of the optimisation
    the optimum, but it shifts the normalised value.
 7. **The night-shift fairness group includes candidates; weekend and hard-shift fairness do not.**
 8. **H3 does not catch overlapping shifts** (`a_s2 ≤ e_s1`). These are excluded by H2 and H7.
+9. **The workload ratio (F4) restricts hours although no objective uses it.** `r_d · M_d` must lie
+   within ±50 of `1000 H_d` for an integer `r_d`. When `M_d > 100`, the interval is narrower than 1,
+   so many values of `H_d` have no such `r_d`.
+   * Only about 40 % of the possible monthly hours are allowed for opt-out doctors.
+   * Example: with `M_d = 248`, `H_d` cannot be 162-169.
+   * This affects 8 of the 14 doctors in `doctors_with_cost.csv`.

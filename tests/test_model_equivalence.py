@@ -3,6 +3,10 @@
 tests/golden/model_fingerprints.json was recorded with the original code (model/model_ref.py on
 main, commit a2610f5). For every scenario it holds the fingerprint of the built model and of the
 model at every Solve() call of the lexicographic phases (objective + constraints added so far).
+
+The canonical fingerprint (sha256) does not depend on the order of variables and constraints.
+raw_sha256 (exact order) is not compared: with one function per equation, C1/C2 and F2/F3 are
+created one after another instead of interleaved as in the original code.
 """
 from __future__ import annotations
 
@@ -21,6 +25,10 @@ from rostering.data import ProblemData, prepare_doctors
 from rostering.model import build_model, prepare_context
 from rostering.pandemic import PandemicConfig, prepare_pandemic_bubbles
 from rostering.solve import solve_lexicographic
+
+def equations_only(fp: dict) -> dict:
+    return {k: v for k, v in fp.items() if k != "raw_sha256"}
+
 
 GOLDEN = json.loads((Path(__file__).parent / "golden" / "model_fingerprints.json").read_text())
 
@@ -52,13 +60,13 @@ def test_model_matches_original(name, pandemic, allow_hire, monkeypatch):
 
     if pandemic:
         assert {str(k): v for k, v in sorted(bubbles.items())} == golden["bubbles"]
-    assert fingerprint(m.model) == golden["build"]
+    assert equations_only(fingerprint(m.model)) == equations_only(golden["build"])
 
     RecordingSolver.calls = []
     monkeypatch.setattr(cp_model, "CpSolver", RecordingSolver)
     solve_lexicographic(m, SolverConfig(use_hints=True), pandemic_mode=pandemic)
-    assert RecordingSolver.calls == golden["solve_calls"]
-    assert fingerprint(m.model) == golden["final"]
+    assert [equations_only(c) for c in RecordingSolver.calls] == [equations_only(c) for c in golden["solve_calls"]]
+    assert equations_only(fingerprint(m.model)) == equations_only(golden["final"])
 
 
 def test_fingerprint_detects_a_changed_equation():

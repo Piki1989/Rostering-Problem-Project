@@ -48,7 +48,10 @@ uv run python -m rostering --help
 |---|---|
 | `rostering/config.py` | datasets, solver settings, objective targets |
 | `rostering/data.py` | loading and checking the CSV files |
-| `rostering/model.py` | CP-SAT model: sets, parameters, constraints |
+| `rostering/model.py` | sets, parameters, model container, `build_model` |
+| `rostering/equations.py` | every equation as a separate function (H1-H13, HP1, C1-C2, D1-D3, S1, F1-F4, U1-U2, O1-O3) |
+| `rostering/oracles.py` | independent pure-Python evaluation of every equation on a schedule |
+| `rostering/verify.py` | checks one equation (or a replacement implementation) against its oracle |
 | `rostering/solve.py` | lexicographic phases (understaffing → isolation → hiring → Chebyshev compromise) |
 | `rostering/results.py` | schedule, per-doctor statistics, satisfaction score |
 | `rostering/pipeline.py` | baseline / hiring scenarios, saving results |
@@ -57,7 +60,20 @@ uv run python -m rostering --help
 | `rostering/metrics.py` | hospital efficiency score |
 | `app/` | Streamlit UI |
 | `docs/MODEL.md` | mathematical specification of the model and its known issues |
-| `tests/` | model equivalence test |
+| `docs/EQUATIONS.md` | contract of every equation function (generated) |
+| `tests/` | model equivalence test, per-equation tests |
+
+## Checking single equations
+
+Every equation is a separate function with the same interface.
+- Each one can be checked alone, and an alternative implementation (e.g. written from a prompt) can be checked in its place.
+- The contract of each function is in `docs/EQUATIONS.md`.
+
+```bash
+uv run python -m rostering.verify --list
+uv run python -m rostering.verify --all
+uv run python -m rostering.verify H3 --impl candidate.py:my_h3
+```
 
 ## Tests
 
@@ -70,3 +86,7 @@ uv run pytest
 - The model must be identical in every variable, constraint and objective, including the constraints added by each solver phase.
 - Any change to the equations makes the test fail.
 - After an intended change, regenerate the fingerprints and describe the change in `docs/MODEL.md`.
+
+`tests/test_equations.py` covers the equations one by one.
+- Every reference equation must agree with its oracle.
+- Ten deliberately wrong implementations must be rejected.

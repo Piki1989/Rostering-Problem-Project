@@ -512,69 +512,8 @@ def validate_bubbles(
 
 
 # =============================================================================
-# CP-SAT CONSTRAINTS (cross-bubble isolation on contact shifts)
-# =============================================================================
-
-def add_pandemic_constraints(
-    model: cp_model.CpModel,
-    x: dict,
-    D_all: list[int],
-    S: list[int],
-    shifts: pd.DataFrame,
-    shift_idx: dict[int, int],
-    config: PandemicConfig,
-    bubble_assignment: dict[int, int],
-    id_to_role: dict[int, str],
-) -> dict:
-    """
-    Forbid mixing of two different bubbles on the same contact-department shift.
-    CLINIC_POOL doctors are excluded - CLINIC is not a contact department anyway.
-    """
-    contact_depts = set(config.contact_depts)
-    contact_shifts = [
-        s for s in S if shifts.loc[shift_idx[s], "dept"] in contact_depts
-    ]
-
-    logger.info("Pandemic constraints: contact departments %s, contact shifts %d / %d",
-                contact_depts, len(contact_shifts), len(S))
-
-    crossbubble_violations = []
-    constraint_count = 0
-
-    missing = [d for d in D_all if d not in bubble_assignment]
-    if missing:
-        warnings.warn(
-            f"[PandemicMode] {len(missing)} doctors without bubble assignment, "
-            f"skipped in pandemic constraints: {missing}"
-        )
-
-    for s in contact_shifts:
-        for i, d1 in enumerate(D_all):
-            if d1 not in bubble_assignment:
-                continue
-            b1 = bubble_assignment[d1]
-            if b1 == CLINIC_POOL:
-                continue  # CLINIC doctors are out of the bubble system
-            for d2 in D_all[i + 1:]:
-                if d2 not in bubble_assignment:
-                    continue
-                b2 = bubble_assignment[d2]
-                if b2 == CLINIC_POOL:
-                    continue
-                if b1 != b2:
-                    viol = model.NewBoolVar(f"crossbubble_{d1}_{d2}_{s}")
-                    model.Add(x[(d1, s)] + x[(d2, s)] <= 1 + viol)
-                    crossbubble_violations.append(viol)
-                    constraint_count += 1
-
-    logger.info("Added %d pandemic constraints", constraint_count)
-    return {
-        "crossbubble_violations": crossbubble_violations,
-    }
-
-
-# =============================================================================
 # RESULTS PACKAGING
+# (the isolation constraint HP1 is in rostering/equations.py)
 # =============================================================================
 
 def get_pandemic_results(
