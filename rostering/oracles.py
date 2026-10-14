@@ -168,7 +168,7 @@ def h7(m, a):
             if not m.p.night_shifts_by_date[t] or not m.p.days_to_shifts[t_next]:
                 continue                       # no constraint is generated for this pair of days
             if nights[(d, t)] + any_shift[(d, t_next)] > 1:
-                out.append(f"{d}: night on {t} and work on {t_next}")
+                out.append(f"{d}: {nights[(d, t)]} night shift(s) on {t} + {any_shift[(d, t_next)]} shift(s) on {t_next} > 1")
     return out
 
 

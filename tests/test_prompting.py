@@ -22,9 +22,22 @@ def test_prompt_contains_task_and_no_reference_code(eq_id):
         assert hint not in prompt
 
 
-def test_formal_level_adds_the_formal_statement():
-    assert "Formal statement" in prompting.build_prompt("H3", "formal")
-    assert "Formal statement" not in prompting.build_prompt("H3", "natural")
+def test_formal_set_adds_the_formal_statement():
+    assert "Formal statement" in prompting.build_prompt("H3", "s4_formal")
+    assert "Formal statement" not in prompting.build_prompt("H3", "s3_spec")
+
+
+@pytest.mark.parametrize("set_name", prompting.list_sets())
+def test_every_set_describes_every_equation(set_name):
+    missing = [eq_id for eq_id in EQUATIONS if not prompting.descriptions(set_name).get(eq_id)]
+    assert not missing, f"{set_name}: no description of {missing}"
+    for eq_id in EQUATIONS:
+        prompting.build_prompt(eq_id, set_name)
+
+
+def test_sets_get_more_detailed():
+    sizes = [sum(len(d) for d in prompting.descriptions(s).values()) for s in ("s0_name", "s1_intent", "s2_rules", "s3_spec")]
+    assert sizes == sorted(sizes)
 
 
 def test_extract_code_takes_the_last_block_with_the_function():
@@ -49,7 +62,7 @@ class FlakyProvider(prompting.Provider):
 
 
 def _args(**kw):
-    defaults = dict(level="natural", attempts=2, samples=10, verify_timeout=300)
+    defaults = dict(set="s3_spec", attempts=2, samples=10, verify_timeout=300)
     return argparse.Namespace(**{**defaults, **kw})
 
 
@@ -72,3 +85,14 @@ def test_manual_run_waits_for_answers_and_checks_them(tmp_path):
     (tmp_path / "H9" / "attempt_1" / "response.md").write_text(answer)
     checked = prompting.run_equation("H9", prompting.ManualProvider(), tmp_path, args)
     assert checked.passed
+
+
+def test_benchmark_compares_sets(tmp_path):
+    args = argparse.Namespace(sets=["s0_name", "s3_spec"], repeats=1, equations=["H2", "O2"], provider="reference",
+                              model=None, command=None, attempts=1, jobs=2, samples=10, timeout=60,
+                              verify_timeout=300, out=tmp_path / "bench")
+    bench_dir = prompting.benchmark(args)
+    report = (bench_dir / "report.md").read_text()
+    assert "| s0_name | 100% |" in report and "| s3_spec | 100% |" in report
+    assert "| H2 one shift per day | restriction | 1/1 | 1/1 |" in report
+    assert (bench_dir / "benchmark.csv").exists()

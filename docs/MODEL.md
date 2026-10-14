@@ -184,6 +184,8 @@ These scores are computed from the solution and are not part of the optimisation
 6. **Unhired candidates still get a weekly underwork term.** It is a constant, so it does not change
    the optimum, but it shifts the normalised value.
 7. **The night-shift fairness group includes candidates; weekend and hard-shift fairness do not.**
+   Unhired candidates have 0 night shifts, so in the baseline the minimum is always 0. `spread_N`
+   is then simply the largest number of night shifts of a specialist.
 8. **H3 does not catch overlapping shifts** (`a_s2 ≤ e_s1`). These are excluded by H2 and H7.
 9. **The workload ratio (F4) restricts hours although no objective uses it.** `r_d · M_d` must lie
    within ±50 of `1000 H_d` for an integer `r_d`. When `M_d > 100`, the interval is narrower than 1,

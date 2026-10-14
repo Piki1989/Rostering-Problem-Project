@@ -1,8 +1,8 @@
-# Natural-language descriptions of the equations
+# Set s3_spec - full specification in natural language
 
-Every `## <ID>` section below is the description inserted into the prompt of that equation. The
-text is a specification of the behaviour, not of the code. Edit it freely; `python -m rostering.prompting prompts`
-shows the resulting prompts.
+Every `## <ID>` section is the description inserted into the prompt of that equation.
+- It states the exact rules, the variable domains and where the outputs are stored, but contains no code.
+- `python -m rostering.prompting prompts --set s3_spec` shows the resulting prompts.
 
 ## H1
 A doctor may only work a shift if the skill required by the shift is one of the doctor's skills.
@@ -32,6 +32,10 @@ doctor works at most two night shifts.
 A doctor who works a night shift that starts on some day must not work any shift that starts on the
 next day of the horizon. Only apply this to pairs of consecutive days where the first day has night
 shifts and the next day has shifts.
+
+For such a pair of days, state it as one inequality per doctor: the number of night shifts the
+doctor works on the first day plus the number of shifts the doctor works on the next day is at
+most 1.
 
 ## H8
 Split the days of the horizon into consecutive blocks of 7 days, starting with the first day (the
@@ -108,24 +112,28 @@ terms (one per preference) in `m.pref_terms`; the score is their sum.
 ## F1
 Night-shift fairness. For every doctor in `m.p.night_allowed` (employed doctors and candidates)
 who is a specialist and allowed to work at night, define an integer variable with domain 0 to 100
-for the number of night shifts the doctor works.
+for the number of night shifts the doctor works. Candidates count too, even when they are not
+hired (they then have 0 night shifts).
 
-The spread is the maximum minus the minimum of these counts. Store it as an integer variable with
-domain 0 to 100 in `m.spread`.
+Define integer variables (domain 0 to 100) that are exactly equal to the maximum and to the minimum
+of these counts; equality, not only bounds. Store the spread, max minus min, as an integer variable
+with domain 0 to 100 in `m.spread`.
 
 ## F2
 Weekend fairness. For every employed specialist (not candidates), define an integer variable with
 domain 0 to 100 for the number of weekend shifts the doctor works.
 
-The spread is the maximum minus the minimum of these counts. Store it as an integer variable with
-domain 0 to 100 in `m.weekend_spread`.
+Define integer variables (domain 0 to 100) that are exactly equal to the maximum and to the minimum
+of these counts. Store the spread, max minus min, as an integer variable with domain 0 to 100 in
+`m.weekend_spread`.
 
 ## F3
 Hard-shift fairness. For every employed specialist (not candidates), define an integer variable
 with domain 0 to 100 for the number of hard shifts the doctor works.
 
-The spread is the maximum minus the minimum of these counts. Store it as an integer variable with
-domain 0 to 100 in `m.hard_spread`.
+Define integer variables (domain 0 to 100) that are exactly equal to the maximum and to the minimum
+of these counts. Store the spread, max minus min, as an integer variable with domain 0 to 100 in
+`m.hard_spread`.
 
 ## F4
 Workload ratio of opt-out doctors, in per mille of their monthly limit. For every opt-out doctor,
@@ -133,8 +141,9 @@ define an integer ratio variable with domain 0 to 2000. The ratio times the mont
 lie between 1000 times the worked hours minus 50 and 1000 times the worked hours plus 50
 (inclusive).
 
-Store the maximum minus the minimum of the ratios as an integer variable with domain 0 to 2000 in
-`m.ratio_spread`. Without opt-out doctors it is 0.
+Define integer variables (domain 0 to 2000) exactly equal to the maximum and the minimum of the
+ratios. Store their difference as an integer variable with domain 0 to 2000 in `m.ratio_spread`.
+Without opt-out doctors, the maximum, the minimum and the spread are 0.
 
 ## U1
 Monthly underwork of regular doctors. The target is 95 % of the monthly hour limit, truncated to an

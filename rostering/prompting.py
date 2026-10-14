@@ -1,18 +1,25 @@
 """Generate a prompt for every equation, ask a model to implement it, verify the answers.
 
-    uv run python -m rostering.prompting prompts --out prompts_preview          # only write the prompts
-    uv run python -m rostering.prompting run --provider claude-cli --model sonnet
+    uv run python -m rostering.prompting sets                                    # list the prompt sets
+    uv run python -m rostering.prompting prompts --set s1_intent                 # only write the prompts
+    uv run python -m rostering.prompting run --set s3_spec --provider claude-cli --model sonnet
+    uv run python -m rostering.prompting benchmark --provider claude-cli --model sonnet --repeats 3
     uv run python -m rostering.prompting run --provider manual                   # answer the prompts by hand ...
     uv run python -m rostering.prompting check runs/<run>                        # ... then verify the answers
     uv run python -m rostering.prompting run --provider reference                # sanity check of the pipeline
 
-The prompts are assembled from the editable files in prompts/ (template, interface contract and a
-natural-language description of every equation); with --level formal the formal statement from
-rostering/equations.py is added. Every answer is verified in a separate process with
-rostering.verify; with --attempts > 1 the failures are sent back for a corrected version.
+A prompt = prompts/template.md filled with the interface contract (prompts/contract.md) and the
+description of the equation from a prompt set (prompts/sets/<set>/equations.md). The sets differ
+in how much they tell the model, from the name of the equation (s0_name) to the full specification
+with the formal statement (s4_formal). A set folder may override template.md, contract.md,
+system.md and feedback.md and may contain set.json with {"descriptions_from": "<set>",
+"formal": true}.
 
-Every run is stored in runs/<timestamp>_<provider>_<model>_<level>/ with the prompts, the raw
-answers, the extracted code, the verification results, summary.csv and report.md.
+Every answer is verified in a separate process with rostering.verify; with --attempts > 1 the
+failures are sent back for a corrected version. A run is stored in
+runs/<timestamp>_<set>_<provider>_<model>/ with the prompts, the raw answers, the extracted code,
+the verification results, summary.csv and report.md; a benchmark stores its runs and the
+comparison of the sets in runs/benchmark_<timestamp>/.
 """
 from __future__ import annotations
 
@@ -37,6 +44,8 @@ from .equations import CONSTRAINTS, EQUATIONS, OBJECTIVES, Equation
 from .verify import CHECKS
 
 PROMPTS_DIR = BASE_DIR / "prompts"
+SETS_DIR = PROMPTS_DIR / "sets"
+DEFAULT_SET = "s3_spec"
 RUNS_DIR = BASE_DIR / "runs"
 ORDER = [eq.id for eq in CONSTRAINTS + OBJECTIVES]
 
@@ -61,13 +70,31 @@ OUTPUT_DESCRIPTIONS = {
 # Prompts
 # ---------------------------------------------------------------------------------------------
 
-def _read(name: str) -> str:
+def list_sets() -> list[str]:
+    return sorted(p.name for p in SETS_DIR.iterdir() if p.is_dir()) if SETS_DIR.exists() else []
+
+
+def _set_config(set_name: str) -> dict:
+    folder = SETS_DIR / set_name
+    if not folder.is_dir():
+        raise SystemExit(f"unknown prompt set {set_name!r}; available: {', '.join(list_sets())}")
+    config_file = folder / "set.json"
+    return json.loads(config_file.read_text()) if config_file.exists() else {}
+
+
+def _read(name: str, set_name: str | None = None) -> str:
+    """prompts/sets/<set>/<name> if the set overrides the file, else prompts/<name>."""
+    if set_name:
+        override = SETS_DIR / set_name / name
+        if override.exists():
+            return override.read_text().strip()
     return (PROMPTS_DIR / name).read_text().strip()
 
 
-def descriptions() -> dict[str, str]:
-    """`## <ID>` sections of prompts/equations.md."""
-    text = (PROMPTS_DIR / "equations.md").read_text()
+def descriptions(set_name: str = DEFAULT_SET) -> dict[str, str]:
+    """`## <ID>` sections of prompts/sets/<set>/equations.md (or of the set in descriptions_from)."""
+    source = _set_config(set_name).get("descriptions_from", set_name)
+    text = (SETS_DIR / source / "equations.md").read_text()
     sections = re.split(r"^## +(\S+)\s*$", text, flags=re.M)
     return {sections[i]: sections[i + 1].strip() for i in range(1, len(sections), 2)}
 
@@ -79,13 +106,13 @@ def _available(eq: Equation) -> str:
     return ", ".join(dict.fromkeys(fields)) or "only the fields of the interface table"
 
 
-def build_prompt(eq_id: str, level: str = "natural") -> str:
+def build_prompt(eq_id: str, set_name: str = DEFAULT_SET) -> str:
     eq = EQUATIONS[eq_id]
-    description = descriptions().get(eq_id)
+    description = descriptions(set_name).get(eq_id)
     if not description:
-        raise KeyError(f"no description of {eq_id} in prompts/equations.md")
+        raise KeyError(f"no description of {eq_id} in prompt set {set_name}")
     formal = ""
-    if level == "formal":
+    if _set_config(set_name).get("formal"):
         formal = "\nFormal statement:\n\n```text\n" + inspect.getdoc(eq.fn) + "\n```\n"
     if eq.kind == "objective":
         output_rule = (f"`{eq.fn.__name__}(m)` must return the expression (or variable) to minimise. Any "
@@ -95,15 +122,15 @@ def build_prompt(eq_id: str, level: str = "natural") -> str:
                        + ", ".join(OUTPUT_DESCRIPTIONS[o] for o in eq.outputs) + " and returns None.")
     else:
         output_rule = f"`{eq.fn.__name__}(m)` adds its constraints to `m.model` and returns None."
-    return _read("template.md").format(
-        contract=_read("contract.md"), id=eq.id, name=eq.name, description=description, formal=formal,
+    return _read("template.md", set_name).format(
+        contract=_read("contract.md", set_name), id=eq.id, name=eq.name, description=description, formal=formal,
         available=_available(eq), output_rule=output_rule, function=eq.fn.__name__,
     ) + "\n"
 
 
-def feedback_prompt(prompt: str, code: str, failures: list[str], show: int = 5) -> str:
+def feedback_prompt(prompt: str, code: str, failures: list[str], show: int = 5, set_name: str | None = None) -> str:
     listed = "\n".join(f"- {f}" for f in failures[:show])
-    return _read("feedback.md").format(prompt=prompt.strip(), code=code.strip(), failures=listed) + "\n"
+    return _read("feedback.md", set_name).format(prompt=prompt.strip(), code=code.strip(), failures=listed) + "\n"
 
 
 def extract_code(response: str, function: str) -> str | None:
@@ -259,8 +286,8 @@ def verify_file(eq_id: str, path: Path, function: str, samples: int, timeout: in
 
 def run_equation(eq_id: str, provider: Provider, run_dir: Path, args) -> EquationRun:
     eq = EQUATIONS[eq_id]
-    system = _read("system.md")
-    base_prompt = build_prompt(eq_id, args.level)
+    system = _read("system.md", args.set)
+    base_prompt = build_prompt(eq_id, args.set)
     prompt = base_prompt
     result = EquationRun(eq_id)
 
@@ -302,7 +329,7 @@ def run_equation(eq_id: str, provider: Provider, run_dir: Path, args) -> Equatio
         (folder / "verify.json").write_text(json.dumps(asdict(attempt), indent=1))
         if attempt.passed or isinstance(provider, ManualProvider):
             break
-        prompt = feedback_prompt(base_prompt, code or response, attempt.failures)
+        prompt = feedback_prompt(base_prompt, code or response, attempt.failures, set_name=args.set)
     return result
 
 
@@ -359,20 +386,21 @@ def _git_commit() -> str:
         return ""
 
 
-def run(args) -> Path:
-    provider = make_provider(args)
+def run(args, provider: Provider | None = None) -> Path:
+    provider = provider or make_provider(args)
+    _set_config(args.set)
     ids = args.equations or ORDER
     unknown = [i for i in ids if i not in EQUATIONS]
     if unknown:
         raise SystemExit(f"unknown equations: {unknown}")
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_tag = re.sub(r"[^A-Za-z0-9.-]+", "-", provider.model or provider.name)
-    run_dir = Path(args.out) if args.out else RUNS_DIR / f"{stamp}_{provider.name}_{model_tag}_{args.level}"
+    run_dir = Path(args.out) if args.out else RUNS_DIR / f"{stamp}_{args.set}_{provider.name}_{model_tag}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    meta = {"provider": provider.name, "model": provider.model, "level": args.level, "attempts": args.attempts,
+    meta = {"set": args.set, "provider": provider.name, "model": provider.model, "attempts": args.attempts,
             "samples": args.samples, "equations": len(ids), "commit": _git_commit(), "started": stamp}
     (run_dir / "config.json").write_text(json.dumps(meta, indent=1))
-    (run_dir / "system.md").write_text(_read("system.md") + "\n")
+    (run_dir / "system.md").write_text(_read("system.md", args.set) + "\n")
 
     def task(eq_id):
         result = run_equation(eq_id, provider, run_dir, args)
@@ -394,7 +422,7 @@ def check(args) -> Path:
     """Verify the answers pasted into <run>/<ID>/attempt_1/response.md (manual provider)."""
     run_dir = Path(args.run_dir)
     meta = json.loads((run_dir / "config.json").read_text())
-    args.level, args.attempts = meta["level"], 1
+    args.set, args.attempts = meta["set"], 1
     ids = [p.name for p in sorted(run_dir.iterdir()) if p.is_dir() and p.name in EQUATIONS]
     results = []
     for eq_id in ids:
@@ -407,29 +435,109 @@ def check(args) -> Path:
     return run_dir
 
 
+def benchmark(args) -> Path:
+    """Run several prompt sets (each repeated) with the same model and compare the pass rates."""
+    sets = args.sets or list_sets()
+    for set_name in sets:
+        _set_config(set_name)
+    provider = make_provider(args)
+    if isinstance(provider, ManualProvider):
+        raise SystemExit("benchmark needs a model provider, not manual")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_tag = re.sub(r"[^A-Za-z0-9.-]+", "-", provider.model or provider.name)
+    bench_dir = Path(args.out) if args.out else RUNS_DIR / f"benchmark_{stamp}_{provider.name}_{model_tag}"
+    bench_dir.mkdir(parents=True, exist_ok=True)
+    meta = {"provider": provider.name, "model": provider.model, "sets": ", ".join(sets), "repeats": args.repeats,
+            "attempts": args.attempts, "samples": args.samples, "commit": _git_commit(), "started": stamp}
+    (bench_dir / "config.json").write_text(json.dumps(meta, indent=1))
+
+    rows = []
+    for set_name in sets:
+        for repeat in range(1, args.repeats + 1):
+            print(f"\n=== set {set_name}, repeat {repeat}/{args.repeats} ===", flush=True)
+            run_args = argparse.Namespace(**{**vars(args), "set": set_name, "out": bench_dir / f"{set_name}_r{repeat}"})
+            run_dir = run(run_args, provider)
+            with open(run_dir / "summary.csv") as f:
+                for row in csv.DictReader(f):
+                    rows.append({"set": set_name, "repeat": repeat, "equation": row["equation"],
+                                 "check": row["check"], "passed": row["passed"] == "True",
+                                 "passed_first_attempt": row["passed_first_attempt"] == "True",
+                                 "attempts": int(row["attempts"]), "first_failure": row["first_failure"]})
+    with open(bench_dir / "benchmark.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    write_benchmark_report(bench_dir, rows, sets, meta)
+    print(f"\nBenchmark report: {bench_dir / 'report.md'}")
+    return bench_dir
+
+
+def write_benchmark_report(bench_dir: Path, rows: list[dict], sets: list[str], meta: dict) -> None:
+    def rate(selected, key="passed"):
+        return sum(r[key] for r in selected) / len(selected) if selected else 0.0
+
+    lines = [f"# Benchmark {bench_dir.name}", "", "| Setting | Value |", "|---|---|",
+             *[f"| {k} | {v} |" for k, v in meta.items()], "",
+             "## Pass rate per prompt set", "",
+             "| Set | Passed (all attempts) | Passed in the first attempt | restriction | value / minimum | objective |",
+             "|---|---|---|---|---|---|"]
+    for set_name in sets:
+        sel = [r for r in rows if r["set"] == set_name]
+        by_kind = lambda kinds: [r for r in sel if r["check"] in kinds]  # noqa: E731
+        lines.append(f"| {set_name} | {rate(sel):.0%} | {rate(sel, 'passed_first_attempt'):.0%} | "
+                     f"{rate(by_kind({'restriction'})):.0%} | {rate(by_kind({'value', 'minimum'})):.0%} | "
+                     f"{rate(by_kind({'objective'})):.0%} |")
+
+    lines += ["", "## Equations (passed repeats / repeats)", "",
+              "| Equation | Check | " + " | ".join(sets) + " |",
+              "|---|---|" + "---|" * len(sets)]
+    for eq_id in ORDER:
+        cells = []
+        for set_name in sets:
+            sel = [r for r in rows if r["set"] == set_name and r["equation"] == eq_id]
+            cells.append(f"{sum(r['passed'] for r in sel)}/{len(sel)}" if sel else "-")
+        if any(c != "-" for c in cells):
+            lines.append(f"| {eq_id} {EQUATIONS[eq_id].name} | {CHECKS[eq_id].kind} | " + " | ".join(cells) + " |")
+
+    lines += ["", "The runs (prompts, answers, code, failures) are in the subfolders <set>_r<repeat>/."]
+    (bench_dir / "report.md").write_text("\n".join(lines) + "\n")
+
+
+def _add_model_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--provider", choices=["claude-cli", "anthropic", "command", "manual", "reference"],
+                        default="claude-cli")
+    parser.add_argument("--model", help="model name for claude-cli / anthropic (e.g. sonnet, opus)")
+    parser.add_argument("--command", help="command for --provider command (prompt on stdin, answer on stdout)")
+    parser.add_argument("--attempts", type=int, default=1, help="attempts per equation (failures are fed back)")
+    parser.add_argument("--jobs", type=int, default=4, help="equations processed in parallel")
+    parser.add_argument("--samples", type=int, default=30, help="schedules per verification")
+    parser.add_argument("--timeout", type=int, default=600, help="seconds per model call")
+    parser.add_argument("--verify-timeout", type=int, default=600)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prompts for the single equations and their verification.")
     sub = parser.add_subparsers(dest="command_name", required=True)
 
-    p_prompts = sub.add_parser("prompts", help="write the prompts without calling a model")
-    p_prompts.add_argument("--out", default="prompts_preview")
-    p_prompts.add_argument("--level", choices=["natural", "formal"], default="natural")
-    p_prompts.add_argument("equations", nargs="*")
+    sub.add_parser("sets", help="list the prompt sets")
 
-    p_run = sub.add_parser("run", help="ask a model for every equation and verify the answers")
+    p_prompts = sub.add_parser("prompts", help="write the prompts without calling a model")
+    p_prompts.add_argument("equations", nargs="*")
+    p_prompts.add_argument("--set", default=DEFAULT_SET)
+    p_prompts.add_argument("--out", default="prompts_preview")
+
+    p_run = sub.add_parser("run", help="ask a model for every equation of one prompt set and verify the answers")
     p_run.add_argument("equations", nargs="*", help="equation ids (default: all)")
-    p_run.add_argument("--provider", choices=["claude-cli", "anthropic", "command", "manual", "reference"],
-                       default="claude-cli")
-    p_run.add_argument("--model", help="model name for claude-cli / anthropic")
-    p_run.add_argument("--command", help="command for --provider command (prompt on stdin, answer on stdout)")
-    p_run.add_argument("--level", choices=["natural", "formal"], default="natural",
-                       help="natural: description only; formal: also the formal statement")
-    p_run.add_argument("--attempts", type=int, default=1, help="attempts per equation (failures are fed back)")
-    p_run.add_argument("--jobs", type=int, default=4, help="equations processed in parallel")
-    p_run.add_argument("--samples", type=int, default=30)
-    p_run.add_argument("--timeout", type=int, default=600, help="seconds per model call")
-    p_run.add_argument("--verify-timeout", type=int, default=600)
+    p_run.add_argument("--set", default=DEFAULT_SET, help=f"prompt set (default {DEFAULT_SET})")
     p_run.add_argument("--out", help="run directory (default runs/<timestamp>_...)")
+    _add_model_options(p_run)
+
+    p_bench = sub.add_parser("benchmark", help="compare prompt sets with the same model")
+    p_bench.add_argument("equations", nargs="*", help="equation ids (default: all)")
+    p_bench.add_argument("--sets", nargs="+", help="prompt sets (default: all)")
+    p_bench.add_argument("--repeats", type=int, default=3, help="runs per set (answers of models vary)")
+    p_bench.add_argument("--out", help="benchmark directory (default runs/benchmark_<timestamp>_...)")
+    _add_model_options(p_bench)
 
     p_check = sub.add_parser("check", help="verify answers pasted into a manual run")
     p_check.add_argument("run_dir")
@@ -437,15 +545,22 @@ def main(argv: list[str] | None = None) -> int:
     p_check.add_argument("--verify-timeout", type=int, default=600)
 
     args = parser.parse_args(argv)
-    if args.command_name == "prompts":
+    if args.command_name == "sets":
+        for set_name in list_sets():
+            config = _set_config(set_name)
+            first = (SETS_DIR / config.get("descriptions_from", set_name) / "equations.md").read_text().splitlines()[0]
+            print(f"{set_name:12} {config.get('description') or first.lstrip('# ')}")
+    elif args.command_name == "prompts":
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
-        (out / "system.md").write_text(_read("system.md") + "\n")
+        (out / "system.md").write_text(_read("system.md", args.set) + "\n")
         for eq_id in args.equations or ORDER:
-            (out / f"{eq_id}.md").write_text(build_prompt(eq_id, args.level))
-        print(f"{len(args.equations or ORDER)} prompts written to {out}/")
+            (out / f"{eq_id}.md").write_text(build_prompt(eq_id, args.set))
+        print(f"{len(args.equations or ORDER)} prompts of set {args.set} written to {out}/")
     elif args.command_name == "run":
         run(args)
+    elif args.command_name == "benchmark":
+        benchmark(args)
     else:
         check(args)
     return 0

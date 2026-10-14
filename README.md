@@ -77,38 +77,46 @@ uv run python -m rostering.verify H3 --impl candidate.py:my_h3
 
 ## Prompts: implementing the equations with an AI model
 
+**Step-by-step instructions for the team (in Polish): [docs/INSTRUKCJA_PL.md](docs/INSTRUKCJA_PL.md).**
+
 `rostering.prompting` builds one prompt per equation, sends it to a model, extracts the code and verifies it as above. It can optionally send the failures back for a corrected version.
-- The prompts are assembled from editable files in `prompts/`:
-  - `template.md`
-  - `contract.md` (interface)
-  - `equations.md` (natural-language description of every equation)
-  - `system.md`
-  - `feedback.md`
-- `--level formal` adds the formal statement of the equation to the prompt.
+- A prompt combines three files:
+  - `prompts/template.md`;
+  - the interface (`prompts/contract.md`);
+  - the description of the equation from a **prompt set** (`prompts/sets/<set>/equations.md`).
+- The sets differ in how much they tell the model:
+
+| Set | Content |
+|---|---|
+| `s0_name` | the name of the equation only |
+| `s1_intent` | the intent in one or two sentences |
+| `s2_rules` | the exact rules without the CP-SAT encoding |
+| `s3_spec` | full specification (domains, outputs) |
+| `s4_formal` | `s3_spec` + the formal statement |
 
 ```bash
-uv run python -m rostering.prompting prompts --out prompts_preview                 # only write the prompts
-uv run python -m rostering.prompting run --provider claude-cli --model sonnet      # all equations
-uv run python -m rostering.prompting run H3 O3 --provider claude-cli --attempts 3  # chosen equations, with feedback
-uv run python -m rostering.prompting run --provider manual                         # write prompts, answer by hand ...
-uv run python -m rostering.prompting check runs/<run>                              # ... then verify the answers
-uv run python -m rostering.prompting run --provider reference                      # sanity check of the pipeline
+uv run python -m rostering.prompting sets                                   # list the sets
+uv run python -m rostering.prompting prompts --set s1_intent --out preview  # only write the prompts
+uv run python -m rostering.prompting run --set s2_rules --model sonnet      # one set, all equations
+uv run python -m rostering.prompting run H3 O3 --set s2_rules --attempts 3  # chosen equations, with feedback
+uv run python -m rostering.prompting benchmark --model sonnet --repeats 3   # compare the sets
+uv run python -m rostering.prompting run --provider manual                  # write prompts, answer by hand ...
+uv run python -m rostering.prompting check runs/<run>                       # ... then verify the answers
+uv run python -m rostering.prompting run --provider reference               # sanity check of the pipeline
 ```
 
 Providers:
 - **`claude-cli`**: Claude Code CLI with no tools, no MCP servers and no session, run in an empty temporary directory, so the model cannot read the repository.
 - **`anthropic`**: the API. Needs `uv sync --extra llm` and `ANTHROPIC_API_KEY`.
-- **`command`**: any command that reads the prompt on stdin and prints the answer, e.g. `--command "ollama run qwen2.5-coder"`.
+- **`command`**: any command that reads the prompt on stdin and prints the answer.
 - **`manual`**: writes the prompts; you paste the answers yourself.
 - **`reference`**: answers with the reference implementation.
 
-Each run is saved in `runs/<timestamp>_<provider>_<model>_<level>/` (ignored by git). It contains, for every equation and attempt:
-- the prompt, the raw answer and the extracted code;
-- the verification result.
+Output, ignored by git:
+- A run goes to `runs/<timestamp>_<set>_<provider>_<model>/`. For every equation and attempt it stores the prompt, the answer, the extracted code and the verification result. It also has `summary.csv` and `report.md`.
+- A benchmark goes to `runs/benchmark_<timestamp>_.../`. It contains the per-set pass rates, the equation × set matrix and `benchmark.csv`.
 
-It also contains `summary.csv` and `report.md`.
-
-The generated code runs locally in a separate process with a time limit. This isolates crashes, but it is not a sandbox, so check the code of models you do not trust.
+The generated code runs locally in a separate process with a time limit. This isolates crashes, but it is not a sandbox.
 
 ## Tests
 

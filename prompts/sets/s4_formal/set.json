@@ -1,0 +1,5 @@
+{
+  "description": "Full specification (s3_spec) plus the formal statement of every equation",
+  "descriptions_from": "s3_spec",
+  "formal": true
+}
